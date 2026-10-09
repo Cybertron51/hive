@@ -4,45 +4,70 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Hive: competitive intelligence swarm</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #0d0d0d; --surface: #1a1a19; --ink: #ffffff; --ink2: #c3c2b7; --muted: #898781;
-    --grid: #2c2c2a; --axis: #383835;
-    --bad: #ec835a; --crit: #d03b3b; --warn: #fab219; --good: #0ca30c;
+    --bg: #0b0c0e; --surface: #15171a; --surface2: #1b1e22; --border: #262a30; --ink: #f2f3f5; --ink2: #b9bec7; --muted: #7d838d;
+    --grid: #23262b; --axis: #3a3f47; --accent: #7c8cff;
+    --ok: #22c55e; --quar: #f97316; --rer: #3b82f6; --mal: #f59e0b; --err: #ef4444; --inj: #f43f5e;
+    --bad: #f97316; --crit: #ef4444; --warn: #f59e0b; --good: #22c55e;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   }
   * { box-sizing: border-box; }
-  body { margin: 0; padding: 16px; background: var(--bg); color: var(--ink); font: 13px/1.4 -apple-system, system-ui, sans-serif; }
-  header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; }
-  h1 { font-size: 16px; margin: 0; }
-  #status { color: var(--muted); font-size: 12px; }
-  .toggle { color: var(--ink2); font-size: 12px; cursor: pointer; }
-  .bar { background: var(--surface); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; color: var(--ink2); }
-  .bar b { color: var(--ink); font-variant-numeric: tabular-nums; }
-  .legend-row { display: flex; flex-wrap: wrap; gap: 4px 18px; margin-bottom: 12px; font-size: 11px; color: var(--muted); }
-  .legend-row b { color: var(--ink2); font-weight: 600; margin-right: 4px; }
-  .legend-row i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px; }
-  .late { color: var(--warn); }
-  #summary span.sep { color: var(--muted); margin: 0 8px; }
-  section.wide { grid-column: 1 / -1; }
+  body { margin: 0; padding: 20px 24px; background: var(--bg); color: var(--ink); font: 13.5px/1.45 Inter, -apple-system, system-ui, "Segoe UI", sans-serif; }
+  header { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 14px; }
+  h1 { font-size: 18px; font-weight: 650; margin: 0; letter-spacing: -.01em; }
+  #status { color: var(--muted); font-size: 12px; font-family: var(--mono); }
   #status.err { color: var(--crit); }
-  main { display: grid; grid-template-columns: repeat(auto-fit, minmax(560px, 1fr)); gap: 12px; }
-  section { background: var(--surface); border-radius: 8px; padding: 12px; min-width: 0; }
-  h2 { font-size: 12px; font-weight: 600; color: var(--ink2); margin: 0 0 8px; text-transform: uppercase; letter-spacing: .04em; }
-  .legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-bottom: 6px; color: var(--ink2); font-size: 12px; }
-  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+  .toggle { display: inline-flex; align-items: center; gap: 6px; color: var(--ink2); font-size: 12px; cursor: pointer; padding: 4px 10px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); transition: border-color .15s; }
+  .toggle:hover { border-color: var(--accent); }
+  .toggle input { accent-color: var(--accent); margin: 0; }
+  .kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 16px; margin-bottom: 12px; }
+  .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; box-shadow: 0 1px 2px rgba(0,0,0,.4); min-width: 0; }
+  .kpi .lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+  .kpi .val { font-size: 26px; font-weight: 650; font-variant-numeric: tabular-nums; letter-spacing: -.02em; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .kpi.ok .val { color: var(--ok); } .kpi.quar .val { color: var(--quar); } .kpi.inj .val { color: var(--inj); }
+  .hbpill { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 12px; font-family: var(--mono); padding: 3px 10px; border-radius: 999px; background: rgba(34,197,94,.12); color: var(--ok); }
+  .hbpill i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; display: inline-block; }
+  .hbpill.late { background: rgba(245,158,11,.14); color: var(--warn); }
+  .bar { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 8px 16px; margin-bottom: 8px; color: var(--ink2); font-size: 12.5px; }
+  .bar b { color: var(--ink); font-variant-numeric: tabular-nums; font-family: var(--mono); font-weight: 600; }
+  .legend-row { display: flex; flex-wrap: wrap; gap: 6px 8px; margin: 10px 0 16px; font-size: 11px; color: var(--muted); }
+  .legend-row > span { background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px; }
+  .legend-row b { color: var(--ink2); font-weight: 600; margin-right: 4px; }
+  .legend-row i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; }
+  .late { color: var(--warn); }
+  #summary span.sep { color: var(--axis); margin: 0 8px; }
+  main { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 16px; }
+  section { grid-column: span 6; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; min-width: 0; box-shadow: 0 1px 2px rgba(0,0,0,.4), 0 4px 12px rgba(0,0,0,.18); transition: border-color .15s; }
+  section:hover { border-color: #323741; }
+  section.wide { grid-column: 1 / -1; }
+  section.wide .snip { max-width: 420px; }
+  th, td { padding-right: 8px; }
+  h2 { font-size: 12px; font-weight: 600; color: var(--ink2); margin: 0 0 10px; text-transform: uppercase; letter-spacing: .06em; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-bottom: 8px; color: var(--ink2); font-size: 11px; }
+  .legend i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
   svg { width: 100%; height: auto; display: block; }
-  svg text { fill: var(--muted); font-size: 10px; }
-  .tbl { overflow: auto; max-height: 340px; }
-  table { border-collapse: collapse; width: 100%; }
-  th, td { text-align: left; padding: 4px 8px 4px 0; border-bottom: 1px solid var(--grid); vertical-align: top; }
-  th { color: var(--muted); font-weight: 500; position: sticky; top: 0; background: var(--surface); }
+  svg text { fill: var(--muted); font-size: 11px; font-family: var(--mono); }
+  .tbl { overflow: auto; max-height: 320px; border: 1px solid var(--grid); border-radius: 8px; }
+  table { border-collapse: separate; border-spacing: 0; width: 100%; font-size: 12.5px; }
+  th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+  th { white-space: nowrap; }
+  th { color: var(--muted); font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: .05em; position: sticky; top: 0; z-index: 1; background: var(--surface2); }
+  tbody tr:nth-child(even) td { background: rgba(255,255,255,.022); }
+  tbody tr { transition: background .15s; }
+  tbody tr:hover td { background: rgba(124,140,255,.07); }
+  td { font-family: var(--mono); font-size: 12px; color: var(--ink2); }
   td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
-  .pill { border-radius: 3px; padding: 0 5px; font-size: 11px; background: var(--grid); color: var(--ink2); }
-  .pill.bad { background: #5a2a1a; color: var(--bad); }
-  .pill.crit { background: #4a1818; color: #ff8a8a; }
+  .pill { display: inline-block; border-radius: 4px; padding: 0 6px; font-size: 11px; line-height: 18px; background: var(--grid); color: var(--ink2); font-family: var(--mono); }
+  .pill.bad { background: rgba(249,115,22,.15); color: var(--quar); }
+  .pill.crit { background: rgba(239,68,68,.16); color: #ff8a8a; }
   .empty { color: var(--muted); padding: 24px 0; text-align: center; }
-  .snip { color: var(--ink2); min-width: 150px; max-width: 360px; overflow-wrap: anywhere; }
-  #tip { position: fixed; pointer-events: none; background: #000; border: 1px solid var(--axis); color: var(--ink); padding: 4px 8px; border-radius: 4px; font-size: 12px; display: none; z-index: 9; }
+  .snip { display: inline-block; vertical-align: top; color: var(--ink2); max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: Inter, -apple-system, system-ui, sans-serif; }
+  #tip { position: fixed; pointer-events: none; background: #050607; border: 1px solid var(--axis); color: var(--ink); padding: 6px 10px; border-radius: 6px; font-size: 12px; display: none; z-index: 9; box-shadow: 0 6px 18px rgba(0,0,0,.5); }
+  footer { margin-top: 20px; color: var(--muted); font-size: 11px; text-align: center; }
+  @media (max-width: 1100px) { section { grid-column: 1 / -1; } .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 </style>
 </head>
 <body>
@@ -51,6 +76,14 @@
   <label class="toggle"><input type="checkbox" id="latestOnly" checked> latest swarm only</label>
   <span id="status">connecting…</span>
 </header>
+<div class="kpis">
+  <div class="kpi"><div class="lbl">Runs</div><div class="val" id="k_runs">–</div></div>
+  <div class="kpi ok"><div class="lbl">Verified</div><div class="val" id="k_ver">–</div></div>
+  <div class="kpi quar"><div class="lbl">Quarantined</div><div class="val" id="k_quar">–</div></div>
+  <div class="kpi inj"><div class="lbl">Injections</div><div class="val" id="k_inj">–</div></div>
+  <div class="kpi"><div class="lbl">Cost</div><div class="val" id="k_cost">–</div></div>
+  <div class="kpi"><div class="lbl">Last heartbeat</div><div><span class="hbpill" id="k_hb"><i></i>–</span></div></div>
+</div>
 <div id="hb" class="bar">Last heartbeat: loading…</div>
 <div id="summary" class="bar">loading…</div>
 <div id="legend" class="legend-row"></div>
@@ -67,6 +100,7 @@
   <section><h2>Cost by model</h2><div id="cost" class="tbl"></div></section>
   <section><h2>Source trust</h2><div id="trust" class="tbl"></div></section>
 </main>
+<footer>Hive: competitive intelligence swarm. ClickHouse Cloud via read-only proxy.</footer>
 <div id="tip"></div>
 <script src="thresholds.js" onerror="window.HIVE_POLICY = window.HIVE_POLICY || {}"></script>
 <script>
@@ -121,7 +155,7 @@ function chartFrame(host, keys, W, H, m) {
 function yAxis(svg, max, W, H, m, fmt = v => v) {
   for (let i = 0; i <= 4; i++) {
     const v = (max * i) / 4, y = H - m.b - ((H - m.t - m.b) * i) / 4;
-    el("line", { x1: m.l, x2: W - m.r, y1: y, y2: y, stroke: i ? "#2c2c2a" : "#383835" }, svg);
+    el("line", { x1: m.l, x2: W - m.r, y1: y, y2: y, stroke: i ? "#23262b" : "#3a3f47" }, svg);
     el("text", { x: m.l - 6, y: y + 3, "text-anchor": "end" }, svg).textContent = fmt(v);
   }
 }
@@ -146,7 +180,7 @@ function renderRuns(rows) {
       return [x(i), y(r ? +r.runs : 0), r ? +r.runs : 0, mn];
     });
     el("polyline", { points: pts.map(p => p[0] + "," + p[1]).join(" "), fill: "none", stroke: color(mod), "stroke-width": 2, "stroke-linejoin": "round" }, svg);
-    if (pts.length < 12) pts.forEach(pt => el("circle", { cx: pt[0], cy: pt[1], r: 4, fill: color(mod), stroke: "#1a1a19", "stroke-width": 2 }, svg));
+    if (pts.length < 12) pts.forEach(pt => el("circle", { cx: pt[0], cy: pt[1], r: 4, fill: color(mod), stroke: "#15171a", "stroke-width": 2 }, svg));
   });
   const hit = el("rect", { x: m.l, y: m.t, width: W - m.l - m.r, height: H - m.t - m.b, fill: "transparent" }, svg);
   hit.addEventListener("mousemove", e => {
@@ -203,11 +237,11 @@ function renderQuarantine(rows) {
   table($("quarantine"), [
     { h: "time", f: r => t(r.created_at) },
     { h: "entity", k: "entity" },
-    { h: "claim", f: r => `<span class="snip">${esc(r.text)}</span>` },
+    { h: "claim", f: r => `<span class="snip" title="${esc(r.text)}">${esc(r.text)}</span>` },
     { h: "conf", num: true, f: r => (+r.confidence).toFixed(2) },
     { h: "status", f: r => pill(r.status, r.status === "quarantined" ? "bad" : "") },
     { h: "judge", f: r => pill(r.judge_verdict, r.judge_verdict === "disagree" ? "bad" : "") },
-    { h: "reason", f: r => `<span class="snip">${esc(r.reason)}</span>` },
+    { h: "reason", f: r => `<span class="snip" title="${esc(r.reason)}">${esc(r.reason)}</span>` },
   ], rows, "nothing quarantined");
 }
 function renderInjections(rows) {
@@ -216,7 +250,7 @@ function renderInjections(rows) {
     { h: "source", k: "source_id" },
     { h: "detector", f: r => pill(r.detector) },
     { h: "pattern", k: "pattern" },
-    { h: "snippet", f: r => `<span class="snip">${esc(r.snippet)}</span>` },
+    { h: "snippet", f: r => `<span class="snip" title="${esc(r.snippet)}">${esc(r.snippet)}</span>` },
     { h: "sev", num: true, f: r => pill((+r.severity).toFixed(2), +r.severity >= .8 ? "crit" : "bad") },
   ], rows, "no injection events");
 }
@@ -230,6 +264,7 @@ function renderMiscls(rows) {
   }).join("");
 }
 function renderCost(rows) {
+  $("k_cost").textContent = "$" + rows.reduce((a, r) => a + +r.cost_usd, 0).toFixed(4);
   table($("cost"), [
     { h: "model", f: r => `<i style="display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:6px;background:${color(r.model)}"></i>${esc(r.model)}` },
     { h: "runs", num: true, k: "runs" },
@@ -253,7 +288,7 @@ function renderFeed(rows) {
     { h: "time", f: r => t(r.created_at) },
     { h: "entity", f: r => `<b>${esc(r.entity)}</b>` },
     { h: "type", f: r => pill(r.claim_type) },
-    { h: "claim", f: r => `<span class="snip">${r.value ? `<b>${esc(r.value)}</b> ` : ""}<span style="color:var(--muted)">${esc(r.text)}</span></span>` },
+    { h: "claim", f: r => `<span class="snip" title="${esc((r.value ? r.value + " " : "") + r.text)}">${r.value ? `<b>${esc(r.value)}</b> ` : ""}<span style="color:var(--muted)">${esc(r.text)}</span></span>` },
     { h: "kind", f: r => pill(r.kind || "?") },
     { h: "source", k: "source_id" },
     { h: "conf", num: true, f: r => (+r.confidence).toFixed(2) },
@@ -297,6 +332,9 @@ function renderHbLine() {
   const left = +lastHb.interval_s - age;
   const next = left >= 0 ? `next in <b>${ago(left)}</b>` : `<span class="late">overdue by <b>${ago(-left)}</b></span>`;
   const st = lastHb.status === "ok" ? "" : ` <span class="pill bad">${esc(lastHb.status)}</span>`;
+  const kp = $("k_hb");
+  kp.className = "hbpill" + (left >= 0 ? "" : " late");
+  kp.innerHTML = `<i></i>${ago(age)} ago`;
   host.innerHTML = `Last heartbeat: <b>${ago(age)}</b> ago${st}, ${next}, <b>${esc(lastHb.docs_new)}</b> new docs, ` +
     `<b>${esc(lastHb.claims_verified)}</b> verified, <b>${esc(lastHb.claims_quarantined)}</b> quarantined, <b>$${(+lastHb.cost_usd).toFixed(4)}</b>`;
 }
@@ -306,9 +344,9 @@ function renderLegend() {
   const P = Object.assign({ QUARANTINE_SEVERITY: 0.6, TRUST_MIN_SEVERITY: 0.5, TRUST_PER_SEVERITY: 0.3, TRUST_PER_DISAGREE: 0.15,
     MIN_CONFIDENCE: 0.6, VERIFY_CONFIDENCE: 0.75, GROUNDING_MIN_TRUST: 0.7 }, window.HIVE_POLICY || {});
   const items = [
-    ["#0ca30c", "verified", `judge agreed and confidence at least ${P.VERIFY_CONFIDENCE}; a single-source claim verifies only if its source trust is at least ${P.GROUNDING_MIN_TRUST}`],
-    ["#ec835a", "quarantined", `judge disagreed, confidence under ${P.MIN_CONFIDENCE}, or its source had an injection event of severity ${P.QUARANTINE_SEVERITY} or more`],
-    ["#3987e5", "rerouted", `confidence between ${P.MIN_CONFIDENCE} and ${P.VERIFY_CONFIDENCE}, so the read was redone on the larger model`],
+    ["#22c55e", "verified", `judge agreed and confidence at least ${P.VERIFY_CONFIDENCE}; a single-source claim verifies only if its source trust is at least ${P.GROUNDING_MIN_TRUST}`],
+    ["#f97316", "quarantined", `judge disagreed, confidence under ${P.MIN_CONFIDENCE}, or its source had an injection event of severity ${P.QUARANTINE_SEVERITY} or more`],
+    ["#3b82f6", "rerouted", `confidence between ${P.MIN_CONFIDENCE} and ${P.VERIFY_CONFIDENCE}, so the read was redone on the larger model`],
     ["#898781", "trust", `1 minus ${P.TRUST_PER_SEVERITY} x severity per injection event of ${P.TRUST_MIN_SEVERITY}+ (once per doc and pattern), minus ${P.TRUST_PER_DISAGREE} per judge disagreement`],
   ];
   $("legend").innerHTML = items.map(([c, k, t]) => `<span><i style="background:${c}"></i><b>${k}</b>${esc(t)}</span>`).join("");
@@ -316,7 +354,7 @@ function renderLegend() {
 renderLegend();
 
 
-const STATUSES = [["ok", "#0ca30c"], ["malformed", "#fab219"], ["quarantined", "#ec835a"], ["rerouted", "#3987e5"], ["error", "#d03b3b"]];
+const STATUSES = [["ok", "#22c55e"], ["malformed", "#f59e0b"], ["quarantined", "#f97316"], ["rerouted", "#3b82f6"], ["error", "#ef4444"]];
 
 function renderTimeline(rows) {
   const host = $("timeline");
@@ -386,6 +424,10 @@ function renderSummary(latest, injections, claims) {
   const by = Object.fromEntries(claims.map(c => [c.status, +c.claims]));
   const total = claims.reduce((a, c) => a + +c.claims, 0);
   const statuses = ["pending", "verified", "quarantined", "rejected"].map(k => `${k} <b>${by[k] || 0}</b>`).join(" · ");
+  $("k_runs").textContent = (+latest.runs).toLocaleString();
+  $("k_ver").textContent = (by.verified || 0).toLocaleString();
+  $("k_quar").textContent = (by.quarantined || 0).toLocaleString();
+  $("k_inj").textContent = (+injections || 0).toLocaleString();
   host.innerHTML = `swarm <b>${esc(latest.swarm_id)}</b><span class="sep">|</span>runs <b>${esc(latest.runs)}</b>` +
     `<span class="sep">|</span>claims <b>${total}</b> (${statuses})` +
     `<span class="sep">|</span>injection events <b>${esc(injections)}</b>`;
