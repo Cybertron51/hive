@@ -73,8 +73,9 @@
 </main>
 <div id="tip"></div>
 <script>
-const CH = "http://localhost:8123/?default_format=JSON";
-const CH_AUTH = { "X-ClickHouse-User": "dashboard", "X-ClickHouse-Key": "hive-dashboard-ro" };
+const PROXY = new URLSearchParams(location.search).get("proxy") === "1";
+const CH = PROXY ? "http://localhost:8765/query" : "http://localhost:8123/?default_format=JSON";
+const CH_AUTH = PROXY ? {} : { "X-ClickHouse-User": "dashboard", "X-ClickHouse-Key": "hive-dashboard-ro" };
 const PALETTE = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9", "#e66767"];
 const colorOf = {};
 function color(key) {

@@ -13,7 +13,9 @@ class Settings(BaseSettings):
     senso_base_url: str = "https://apiv2.senso.ai/api/v1"
     clickhouse_url: str = "http://localhost:8123"
     clickhouse_db: str = "hive"
+    clickhouse_user: str = "default"
     clickhouse_password: str = ""
+    clickhouse_secure: bool = False
 
 
 settings = Settings()

@@ -54,6 +54,21 @@ _client: Any = None
 _down_until = 0.0
 
 
+def connect(database: str | None = None) -> Any:
+    u = urlparse(settings.clickhouse_url)
+    secure = settings.clickhouse_secure or u.scheme == "https"
+    return clickhouse_connect.get_client(
+        host=u.hostname or "localhost",
+        port=u.port or (8443 if secure else 8123),
+        secure=secure,
+        username=u.username or settings.clickhouse_user,
+        password=u.password or settings.clickhouse_password,
+        database=settings.clickhouse_db if database is None else database,
+        connect_timeout=8 if secure else 2,
+        send_receive_timeout=30 if secure else 10,
+    )
+
+
 def _get_client() -> Any:
     global _client, _down_until
     if _client is not None:
@@ -61,17 +76,7 @@ def _get_client() -> Any:
     if time.monotonic() < _down_until:
         return None
     try:
-        u = urlparse(settings.clickhouse_url)
-        _client = clickhouse_connect.get_client(
-            host=u.hostname or "localhost",
-            port=u.port or (8443 if u.scheme == "https" else 8123),
-            secure=u.scheme == "https",
-            username=u.username or "default",
-            password=u.password or settings.clickhouse_password,
-            database=settings.clickhouse_db,
-            connect_timeout=2,
-            send_receive_timeout=10,
-        )
+        _client = connect()
     except Exception as exc:
         log.warning("clickhouse unavailable: %s", exc)
         _down_until = time.monotonic() + RETRY_AFTER_S

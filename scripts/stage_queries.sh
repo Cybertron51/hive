@@ -5,17 +5,24 @@ cd "$(dirname "$0")/.."
 PAUSE=0
 [ "${1:-}" = "--pause" ] && PAUSE=1
 
-PW=$(grep -E '^CLICKHOUSE_PASSWORD=' .env 2>/dev/null | tail -1 | cut -d= -f2- | sed -e 's/^["'"'"']//' -e 's/["'"'"']$//')
-EXEC=(docker exec -i)
-if [ -n "$PW" ]; then
-  export CLICKHOUSE_PASSWORD="$PW"
-  EXEC+=(-e CLICKHOUSE_USER=default -e CLICKHOUSE_PASSWORD)
-fi
-EXEC+=(tokenshackathon-clickhouse clickhouse-client --format PrettyCompact)
+source scripts/_ch_mode.sh
+
+ch() {
+  if [ "$IS_CLOUD" = 1 ]; then
+    $PY scripts/chsql.py --db hive --format PrettyCompact -q "$1"
+    return
+  fi
+  local pw; pw=$(envval CLICKHOUSE_PASSWORD)
+  if [ -n "$pw" ]; then
+    CLICKHOUSE_PASSWORD="$pw" docker exec -i -e CLICKHOUSE_USER=default -e CLICKHOUSE_PASSWORD "$CONTAINER" clickhouse-client --format PrettyCompact -q "$1"
+  else
+    docker exec -i "$CONTAINER" clickhouse-client --format PrettyCompact -q "$1"
+  fi
+}
 
 run() {
   printf '\n\033[1m%s\033[0m\n' "$1"
-  out=$("${EXEC[@]}" -q "$2" 2>&1) || { echo "query failed: $out"; return; }
+  out=$(ch "$2" 2>&1) || { echo "query failed: $out"; return; }
   if [ -n "$out" ]; then echo "$out"; else echo "(no rows)"; fi
   if [ "$PAUSE" = 1 ]; then read -r -p "(enter for next) " _ </dev/tty || true; fi
 }

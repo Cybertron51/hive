@@ -2,7 +2,7 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
-CONTAINER=tokenshackathon-clickhouse
+source scripts/_ch_mode.sh
 CH=http://localhost:8123
 FAILS=0
 
@@ -10,22 +10,26 @@ pass() { printf '  PASS  %s\n' "$1"; }
 fail() { printf '  FAIL  %s\n' "$1"; FAILS=$((FAILS + 1)); }
 note() { printf '  NOTE  %s\n' "$1"; }
 
-envval() {
-  [ -f .env ] || return 0
-  grep -E "^$1=" .env | tail -1 | cut -d= -f2- | sed -e 's/^["'"'"']//' -e 's/["'"'"']$//'
-}
-
 chq() {
-  curl -s -m 5 "$CH/" -K - --data-binary "$1" <<<"user = \"default:$(envval CLICKHOUSE_PASSWORD)\"" 2>/dev/null
+  if [ "$IS_CLOUD" = 1 ]; then
+    $PY scripts/chsql.py -q "$1" 2>&1
+  else
+    curl -s -m 5 "$CH/" -K - --data-binary "$1" <<<"user = \"default:$(envval CLICKHOUSE_PASSWORD)\"" 2>/dev/null
+  fi
 }
 
-echo "Docker"
-if docker info >/dev/null 2>&1; then pass "docker daemon running"; else fail "docker daemon not running"; fi
-
-echo "ClickHouse"
-health=$(docker inspect -f '{{.State.Health.Status}}' "$CONTAINER" 2>/dev/null || echo missing)
-if [ "$health" = healthy ]; then pass "container $CONTAINER healthy"; else fail "container $CONTAINER status: $health"; fi
-if [ "$(curl -s -m 3 "$CH/ping" 2>/dev/null)" = "Ok." ]; then pass "HTTP :8123 responds"; else fail "HTTP :8123 not responding"; fi
+if [ "$IS_CLOUD" = 1 ]; then
+  echo "ClickHouse (Cloud mode)"
+  note "docker checks skipped, using the HTTPS endpoint from .env"
+  if [ "$(chq 'SELECT 1' | tr -d '[:space:]')" = "1" ]; then pass "Cloud endpoint answers over HTTPS"; else fail "Cloud endpoint not reachable or credentials rejected"; fi
+else
+  echo "Docker"
+  if docker info >/dev/null 2>&1; then pass "docker daemon running"; else fail "docker daemon not running"; fi
+  echo "ClickHouse"
+  health=$(docker inspect -f '{{.State.Health.Status}}' "$CONTAINER" 2>/dev/null || echo missing)
+  if [ "$health" = healthy ]; then pass "container $CONTAINER healthy"; else fail "container $CONTAINER status: $health"; fi
+  if [ "$(curl -s -m 3 "$CH/ping" 2>/dev/null)" = "Ok." ]; then pass "HTTP :8123 responds"; else fail "HTTP :8123 not responding"; fi
+fi
 
 TABLES="agent_runs claims injection_events source_trust heartbeats seen_docs"
 VIEWS="latest_swarm runs_per_minute_by_model confidence_histogram quarantine_queue claims_by_status injection_recent injection_counts misclassification_by_model cost_by_model source_trust_current runs_timeline heartbeats_recent verified_claims_feed claims_by_entity"
@@ -45,13 +49,18 @@ else
 fi
 
 echo "ClickHouse security"
-if [ -n "$(envval CLICKHOUSE_PASSWORD)" ]; then pass "CLICKHOUSE_PASSWORD set in .env"; else fail "CLICKHOUSE_PASSWORD empty: writer user has no password"; fi
-ports=$(docker port "$CONTAINER" 2>/dev/null | awk '{print $3}')
-if [ -n "$ports" ] && ! echo "$ports" | grep -qv '^127\.0\.0\.1:'; then pass "ports bound to 127.0.0.1 only"; else fail "ports exposed beyond loopback: $(echo $ports)"; fi
-anon=$(curl -s -m 5 "$CH/" --data-binary "SELECT 1" 2>/dev/null)
-if [ "$anon" = "1" ]; then fail "unauthenticated queries are accepted"; else pass "unauthenticated queries rejected"; fi
-dw=$(curl -s -m 5 "$CH/?user=dashboard&password=hive-dashboard-ro" --data-binary "CREATE TABLE hive._probe (x UInt8) ENGINE = Memory" 2>/dev/null)
-case "$dw" in *READONLY*|*"readonly"*|*ACCESS_DENIED*) pass "dashboard user cannot write" ;; *) fail "dashboard user write not rejected: $(echo "$dw" | head -c 80)" ;; esac
+if [ "$IS_CLOUD" = 1 ]; then
+  case "$(envval CLICKHOUSE_URL)" in https://*) pass "Cloud URL uses HTTPS" ;; *) fail "Cloud mode but CLICKHOUSE_URL is not https" ;; esac
+  if [ -n "$(envval CLICKHOUSE_PASSWORD)" ]; then pass "CLICKHOUSE_PASSWORD set"; else fail "CLICKHOUSE_PASSWORD empty"; fi
+else
+  if [ -n "$(envval CLICKHOUSE_PASSWORD)" ]; then pass "CLICKHOUSE_PASSWORD set in .env"; else fail "CLICKHOUSE_PASSWORD empty: writer user has no password"; fi
+  ports=$(docker port "$CONTAINER" 2>/dev/null | awk '{print $3}')
+  if [ -n "$ports" ] && ! echo "$ports" | grep -qv '^127\.0\.0\.1:'; then pass "ports bound to 127.0.0.1 only"; else fail "ports exposed beyond loopback: $(echo $ports)"; fi
+  anon=$(curl -s -m 5 "$CH/" --data-binary "SELECT 1" 2>/dev/null)
+  if [ "$anon" = "1" ]; then fail "unauthenticated queries are accepted"; else pass "unauthenticated queries rejected"; fi
+  dw=$(curl -s -m 5 "$CH/?user=dashboard&password=$(envval CLICKHOUSE_RO_PASSWORD | grep . || echo hive-dashboard-ro)" --data-binary "CREATE TABLE hive._probe (x UInt8) ENGINE = Memory" 2>/dev/null)
+  case "$dw" in *READONLY*|*"readonly"*|*ACCESS_DENIED*) pass "dashboard user cannot write" ;; *) fail "dashboard user write not rejected: $(echo "$dw" | head -c 80)" ;; esac
+fi
 
 echo "Environment"
 if [ -f .env ]; then pass ".env present"; else fail ".env missing"; fi
