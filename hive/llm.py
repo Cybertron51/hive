@@ -5,11 +5,12 @@
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 from typing import Any
 
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, RateLimitError
 from pydantic import BaseModel
 
 from hive.config import settings
@@ -25,6 +26,24 @@ class LLMResult(BaseModel):
 
 
 _client: AsyncOpenAI | None = None
+MAX_IN_FLIGHT = 20
+RATE_LIMIT_RETRIES = 3
+_gate: asyncio.Semaphore | None = None
+
+
+def _semaphore() -> asyncio.Semaphore:
+    global _gate
+    if _gate is None:
+        _gate = asyncio.Semaphore(MAX_IN_FLIGHT)
+    return _gate
+
+
+def _retry_after(err: RateLimitError) -> float:
+    headers = getattr(getattr(err, "response", None), "headers", None) or {}
+    try:
+        return min(float(headers.get("retry-after", 5)), 60.0)
+    except (TypeError, ValueError):
+        return 5.0
 
 
 def client() -> AsyncOpenAI:
@@ -56,16 +75,25 @@ async def chat_json(
     model: str, system: str, user: str, schema_hint: str, temperature: float = 0.0, max_tokens: int = 2000
 ) -> LLMResult:
     started = time.perf_counter()
-    resp = await client().chat.completions.create(
-        model=model,
-        temperature=temperature,
-        max_tokens=max_tokens,
-        extra_body={"chat_template_kwargs": {"enable_thinking": False}, "reasoning_effort": "low"},
-        messages=[
-            {"role": "system", "content": f"{system}\n\nRespond with one JSON object only, matching: {schema_hint}"},
-            {"role": "user", "content": user},
-        ],
-    )
+    messages = [
+        {"role": "system", "content": f"{system}\n\nRespond with one JSON object only, matching: {schema_hint}"},
+        {"role": "user", "content": user},
+    ]
+    async with _semaphore():
+        for attempt in range(RATE_LIMIT_RETRIES + 1):
+            try:
+                resp = await client().chat.completions.create(
+                    model=model,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    extra_body={"chat_template_kwargs": {"enable_thinking": False}, "reasoning_effort": "low"},
+                    messages=messages,
+                )
+                break
+            except RateLimitError as err:
+                if attempt == RATE_LIMIT_RETRIES:
+                    raise
+                await asyncio.sleep(_retry_after(err) * (attempt + 1))
     latency_ms = int((time.perf_counter() - started) * 1000)
     raw = resp.choices[0].message.content or ""
     data = _extract_json(raw)

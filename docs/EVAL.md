@@ -182,37 +182,37 @@ These count against precision. Some may be true details the ground truth doesn't
 
 ## False positives on live feeds
 
-Generated 2026-10-09T20:17:35Z. Detectors: **heuristic only**. 88 live docs from 23 sources (RSS and EDGAR). There is no ground truth here, so every flagged doc is presumed a false positive until someone reads the snippet.
+Generated 2026-10-09T21:21:36Z. Detectors: **heuristic + canary**. 88 live docs from 23 sources (RSS and EDGAR). There is no ground truth here, so every flagged doc is presumed a false positive until someone reads the snippet.
 
-**Latest scan: 0/88 docs flagged (0%), 5 events.**
+**Latest scan: 0/88 docs flagged (0%), 6 events.**
 
-Coverage: n/a docs were summary-only (under 400 chars, usually because the site blocked the article fetch), so their full text was not scanned. Sources that returned nothing: none. Results vary between scans for this reason; every scan is listed under Scan history below.
+Coverage: 3 docs were summary-only (under 400 chars, usually because the site blocked the article fetch), so their full text was not scanned. Sources that returned nothing: none. Results vary between scans for this reason; every scan is listed under Scan history below.
 
 | Source | Kind | Docs | Summary-only | Flagged | Flag rate | Events | Severity | Patterns |
 |---|---|---|---|---|---|---|---|---|
-| bleepingcomputer | rss | 5 | n/a | 0 | 0% | 0 | - | - |
-| cloudflare_blog | rss | 5 | n/a | 0 | 0% | 0 | - | - |
-| crowdstrike_blog | rss | 5 | n/a | 0 | 0% | 1 | low (<0.5) 1 | respond_with 1 |
-| darkreading | rss | 5 | n/a | 0 | 0% | 0 | - | - |
-| datadog_securitylabs | rss | 5 | n/a | 0 | 0% | 0 | - | - |
-| edgar_cloudflare | edgar | 2 | n/a | 0 | 0% | 1 | low (<0.5) 1 | base64_blob 1 |
-| edgar_crowdstrike | edgar | 2 | n/a | 0 | 0% | 0 | - | - |
-| edgar_datadog | edgar | 2 | n/a | 0 | 0% | 0 | - | - |
-| edgar_fortinet | edgar | 2 | n/a | 0 | 0% | 0 | - | - |
-| edgar_okta | edgar | 2 | n/a | 0 | 0% | 0 | - | - |
-| edgar_paloaltonetworks | edgar | 2 | n/a | 0 | 0% | 0 | - | - |
-| edgar_rapid7 | edgar | 2 | n/a | 0 | 0% | 0 | - | - |
-| edgar_sentinelone | edgar | 2 | n/a | 0 | 0% | 0 | - | - |
-| edgar_zscaler | edgar | 2 | n/a | 0 | 0% | 0 | - | - |
-| fortinet_threat_research | rss | 5 | n/a | 0 | 0% | 0 | - | - |
-| krebsonsecurity | rss | 5 | n/a | 0 | 0% | 0 | - | - |
-| paloalto_unit42 | rss | 5 | n/a | 0 | 0% | 2 | low (<0.5) 2 | report_that 2 |
-| rapid7_blog | rss | 5 | n/a | 0 | 0% | 0 | - | - |
-| securityweek | rss | 5 | n/a | 0 | 0% | 0 | - | - |
-| sentinelone_labs | rss | 5 | n/a | 0 | 0% | 0 | - | - |
-| thehackernews | rss | 5 | n/a | 0 | 0% | 0 | - | - |
-| wiz_blog | rss | 5 | n/a | 0 | 0% | 0 | - | - |
-| zscaler_threatlabz | rss | 5 | n/a | 0 | 0% | 1 | low (<0.5) 1 | base64_blob 1 |
+| bleepingcomputer | rss | 5 | 0 | 0 | 0% | 0 | - | - |
+| cloudflare_blog | rss | 5 | 0 | 0 | 0% | 0 | - | - |
+| crowdstrike_blog | rss | 5 | 0 | 0 | 0% | 1 | low (<0.5) 1 | respond_with 1 |
+| darkreading | rss | 5 | 3 | 0 | 0% | 1 | low (<0.5) 1 | system_prompt 1 |
+| datadog_securitylabs | rss | 5 | 0 | 0 | 0% | 0 | - | - |
+| edgar_cloudflare | edgar | 2 | 0 | 0 | 0% | 1 | low (<0.5) 1 | base64_blob 1 |
+| edgar_crowdstrike | edgar | 2 | 0 | 0 | 0% | 0 | - | - |
+| edgar_datadog | edgar | 2 | 0 | 0 | 0% | 0 | - | - |
+| edgar_fortinet | edgar | 2 | 0 | 0 | 0% | 0 | - | - |
+| edgar_okta | edgar | 2 | 0 | 0 | 0% | 0 | - | - |
+| edgar_paloaltonetworks | edgar | 2 | 0 | 0 | 0% | 0 | - | - |
+| edgar_rapid7 | edgar | 2 | 0 | 0 | 0% | 0 | - | - |
+| edgar_sentinelone | edgar | 2 | 0 | 0 | 0% | 0 | - | - |
+| edgar_zscaler | edgar | 2 | 0 | 0 | 0% | 0 | - | - |
+| fortinet_threat_research | rss | 5 | 0 | 0 | 0% | 0 | - | - |
+| krebsonsecurity | rss | 5 | 0 | 0 | 0% | 0 | - | - |
+| paloalto_unit42 | rss | 5 | 0 | 0 | 0% | 2 | low (<0.5) 2 | report_that 2 |
+| rapid7_blog | rss | 5 | 0 | 0 | 0% | 0 | - | - |
+| securityweek | rss | 5 | 0 | 0 | 0% | 0 | - | - |
+| sentinelone_labs | rss | 5 | 0 | 0 | 0% | 0 | - | - |
+| thehackernews | rss | 5 | 0 | 0 | 0% | 0 | - | - |
+| wiz_blog | rss | 5 | 0 | 0 | 0% | 0 | - | - |
+| zscaler_threatlabz | rss | 5 | 0 | 0 | 0% | 1 | low (<0.5) 1 | base64_blob 1 |
 
 ### Scan history
 
@@ -224,3 +224,4 @@ Every live-feed scan, oldest first. A doc flagged in any scan is listed, even if
 | 2026-10-09T20:07:09Z | heuristic only | 88 | 1 (1%) | darkreading: Social Engineering AI Agents: The New BEC for 2026 (system_prompt 0.6) |  |
 | 2026-10-09T20:17:13Z | heuristic only | 88 | 0 (0%) | - |  |
 | 2026-10-09T20:17:35Z | heuristic only | 88 | 0 (0%) | - |  |
+| 2026-10-09T21:21:36Z | heuristic + canary | 88 | 0 (0%) | - |  |

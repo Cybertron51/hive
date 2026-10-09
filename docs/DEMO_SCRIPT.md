@@ -45,9 +45,9 @@ On the dashboard, the timeline fills with runs per model and role and their late
 
 ## 1:05 to 1:20 The contradiction (beat 5)
 
-Dashboard: quarantine queue, the Quillon Shield funding row.
+Dashboard: quarantine queue (the $45M row), then the verified-claims feed (the 8-K's $450M).
 
-> "A news site says Quillon Shield raised $45 million; the press release and the 8-K say $450 million. The wrong number doesn't ship; the judge can be over-cautious and held the true 8-K too; we'd rather miss than lie."
+> "A news site says Quillon Shield raised $45 million; the press release and the 8-K say $450 million. The $45 million claim is quarantined and the 8-K's $450 million verifies: a secondary article can't outvote a filing."
 
 ## 1:20 to 1:45 Profile from Senso (beat 6)
 
