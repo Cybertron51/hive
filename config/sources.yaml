@@ -1,0 +1,89 @@
+# Hive sources. kind: fixture | page | rss | edgar
+# Fixture companies are FICTIONAL (Helixon Therapeutics, Vantra Bio, Orrin Genomics, Calyx Medicines, Strand Labs).
+# Set enabled: false to skip a source. Live sources fail soft.
+sources:
+  - source_id: helixon_newsroom
+    kind: fixture
+    path: fixtures/helixon_press_release.html
+    url: https://helixon-therapeutics.example/news/series-c
+    entities: [Helixon Therapeutics]
+  - source_id: helixon_newsroom
+    kind: fixture
+    path: fixtures/helixon_exec_appointment.html
+    url: https://helixon-therapeutics.example/news/cfo-appointment
+    entities: [Helixon Therapeutics, Calyx Medicines]
+  - source_id: helixon_blog
+    kind: fixture
+    path: fixtures/helixon_blog_update.html
+    url: https://helixon-therapeutics.example/blog/q3-update
+    entities: [Helixon Therapeutics, Vantra Bio, Orrin Genomics]
+  - source_id: vantra_newsroom
+    kind: fixture
+    path: fixtures/vantra_press_release.html
+    url: https://vantra-bio.example/news/series-d
+    entities: [Vantra Bio]
+  - source_id: vantra_newsroom
+    kind: fixture
+    path: fixtures/vantra_phase2_topline.html
+    url: https://vantra-bio.example/news/vantage-topline
+    entities: [Vantra Bio]
+  - source_id: biotech_ledger
+    kind: fixture
+    path: fixtures/vantra_funding_news.html
+    url: https://biotech-ledger.example/2026/09/vantra-raises-45m
+    entities: [Vantra Bio, Calyx Medicines]
+  - source_id: edgar_mirror
+    kind: fixture
+    path: fixtures/vantra_8k.html
+    url: https://edgar-mirror.example/vantra/8-k-2026-09-24
+    entities: [Vantra Bio]
+  - source_id: edgar_mirror
+    kind: fixture
+    path: fixtures/orrin_8k.html
+    url: https://edgar-mirror.example/orrin/8-k-2026-09-02
+    entities: [Orrin Genomics, Calyx Medicines]
+  - source_id: orrin_newsroom
+    kind: fixture
+    path: fixtures/orrin_partnership_pr.html
+    url: https://orrin-genomics.example/news/calyx-collaboration
+    entities: [Orrin Genomics, Calyx Medicines]
+  - source_id: calyx_newsroom
+    kind: fixture
+    path: fixtures/calyx_ind_clearance.html
+    url: https://calyx-medicines.example/news/clx-330-ind
+    entities: [Calyx Medicines]
+  - source_id: biotech_ledger
+    kind: fixture
+    path: fixtures/calyx_restructuring_news.html
+    url: https://biotech-ledger.example/2026/09/calyx-layoffs
+    entities: [Calyx Medicines, Orrin Genomics]
+  - source_id: strand_blog
+    kind: fixture
+    path: fixtures/strand_labs_blog.html
+    url: https://strand-labs.example/blog/design-loop
+    entities: [Strand Labs]
+  - source_id: biotech_ledger
+    kind: fixture
+    path: fixtures/strand_labs_seed_news.html
+    url: https://biotech-ledger.example/2026/06/strand-labs-seed
+    entities: [Strand Labs]
+  - source_id: biotech_ledger
+    kind: fixture
+    path: fixtures/weekly_roundup_news.html
+    url: https://biotech-ledger.example/2026/09/week-in-review
+    entities: [Vantra Bio, Helixon Therapeutics, Orrin Genomics, Calyx Medicines]
+
+  # Live sources (real public data; never seeded with fabricated claims)
+  - source_id: fda_press
+    kind: rss
+    url: https://www.fda.gov/about-fda/contact-fda/stay-informed/rss-feeds/press-releases/rss.xml
+    max_items: 5
+    entities: []
+  - source_id: sec_edgar_8k_phase2
+    kind: edgar
+    query: '"phase 2" "topline"'
+    forms: 8-K
+    startdt: "2026-01-01"
+    enddt: "2026-10-09"
+    max_items: 3
+    entities: []

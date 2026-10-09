@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hive Monitor</title>
+<style>
+  :root {
+    --bg: #0d0d0d; --surface: #1a1a19; --ink: #ffffff; --ink2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835;
+    --bad: #ec835a; --crit: #d03b3b; --warn: #fab219; --good: #0ca30c;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 16px; background: var(--bg); color: var(--ink); font: 13px/1.4 -apple-system, system-ui, sans-serif; }
+  header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; }
+  h1 { font-size: 16px; margin: 0; }
+  #status { color: var(--muted); font-size: 12px; }
+  #status.err { color: var(--crit); }
+  main { display: grid; grid-template-columns: repeat(auto-fit, minmax(560px, 1fr)); gap: 12px; }
+  section { background: var(--surface); border-radius: 8px; padding: 12px; min-width: 0; }
+  h2 { font-size: 12px; font-weight: 600; color: var(--ink2); margin: 0 0 8px; text-transform: uppercase; letter-spacing: .04em; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-bottom: 6px; color: var(--ink2); font-size: 12px; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+  svg { width: 100%; height: auto; display: block; }
+  svg text { fill: var(--muted); font-size: 10px; }
+  .tbl { overflow: auto; max-height: 340px; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { text-align: left; padding: 4px 8px 4px 0; border-bottom: 1px solid var(--grid); vertical-align: top; }
+  th { color: var(--muted); font-weight: 500; position: sticky; top: 0; background: var(--surface); }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .pill { border-radius: 3px; padding: 0 5px; font-size: 11px; background: var(--grid); color: var(--ink2); }
+  .pill.bad { background: #5a2a1a; color: var(--bad); }
+  .pill.crit { background: #4a1818; color: #ff8a8a; }
+  .empty { color: var(--muted); padding: 24px 0; text-align: center; }
+  .snip { color: var(--ink2); min-width: 150px; max-width: 360px; overflow-wrap: anywhere; }
+  #tip { position: fixed; pointer-events: none; background: #000; border: 1px solid var(--axis); color: var(--ink); padding: 4px 8px; border-radius: 4px; font-size: 12px; display: none; z-index: 9; }
+</style>
+</head>
+<body>
+<header><h1>Hive swarm monitor</h1><span id="status">connecting…</span></header>
+<main>
+  <section><h2>Runs per minute by model</h2><div id="runs"></div></section>
+  <section><h2>Confidence histogram by role</h2><div id="conf"></div></section>
+  <section><h2>Quarantine queue</h2><div id="quarantine" class="tbl"></div></section>
+  <section><h2>Injection events</h2><div id="injections" class="tbl"></div></section>
+  <section><h2>Misclassification by model (judge disagree rate)</h2><div id="miscls"></div></section>
+  <section><h2>Cost by model</h2><div id="cost" class="tbl"></div></section>
+  <section><h2>Source trust</h2><div id="trust" class="tbl"></div></section>
+</main>
+<div id="tip"></div>
+<script>
+const CH = "http://localhost:8123/?add_http_cors_header=1&default_format=JSON";
+const PALETTE = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9", "#e66767"];
+const colorOf = {};
+function color(key) {
+  if (!(key in colorOf)) colorOf[key] = PALETTE[Object.keys(colorOf).length % PALETTE.length];
+  return colorOf[key];
+}
+const NS = "http://www.w3.org/2000/svg";
+const $ = id => document.getElementById(id);
+const tip = $("tip");
+
+function esc(v) {
+  return String(v ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+function showTip(e, html) {
+  tip.innerHTML = html;
+  tip.style.display = "block";
+  tip.style.left = Math.min(e.clientX + 12, innerWidth - 220) + "px";
+  tip.style.top = e.clientY + 12 + "px";
+}
+function hideTip() { tip.style.display = "none"; }
+
+async function q(view) {
+  const r = await fetch(CH, { method: "POST", body: `SELECT * FROM hive.${view}` });
+  if (!r.ok) throw new Error(`${view}: ${r.status}`);
+  return (await r.json()).data;
+}
+
+function el(name, attrs, parent) {
+  const n = document.createElementNS(NS, name);
+  for (const k in attrs) n.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(n);
+  return n;
+}
+function legend(keys) {
+  return `<div class="legend">${keys.map(k => `<span><i style="background:${color(k)}"></i>${esc(k)}</span>`).join("")}</div>`;
+}
+function empty(host, msg) { host.innerHTML = `<div class="empty">${esc(msg)}</div>`; }
+
+function chartFrame(host, keys, W, H, m) {
+  host.innerHTML = legend(keys);
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}` });
+  host.appendChild(svg);
+  return svg;
+}
+function yAxis(svg, max, W, H, m, fmt = v => v) {
+  for (let i = 0; i <= 4; i++) {
+    const v = (max * i) / 4, y = H - m.b - ((H - m.t - m.b) * i) / 4;
+    el("line", { x1: m.l, x2: W - m.r, y1: y, y2: y, stroke: i ? "#2c2c2a" : "#383835" }, svg);
+    el("text", { x: m.l - 6, y: y + 3, "text-anchor": "end" }, svg).textContent = fmt(v);
+  }
+}
+
+function renderRuns(rows) {
+  const host = $("runs");
+  if (!rows.length) return empty(host, "no runs in the last 60 minutes");
+  const models = [...new Set(rows.map(r => r.model))].sort();
+  const minutes = [...new Set(rows.map(r => r.minute))].sort();
+  const W = 520, H = 220, m = { l: 34, r: 10, t: 8, b: 22 };
+  const svg = chartFrame(host, models, W, H, m);
+  const max = Math.max(...rows.map(r => +r.runs), 1);
+  yAxis(svg, max, W, H, m, v => Math.round(v));
+  const x = i => m.l + (minutes.length < 2 ? (W - m.l - m.r) / 2 : ((W - m.l - m.r) * i) / (minutes.length - 1));
+  const y = v => H - m.b - ((H - m.t - m.b) * v) / max;
+  [0, minutes.length - 1].forEach(i => {
+    if (minutes[i]) el("text", { x: x(i), y: H - 6, "text-anchor": i ? "end" : "start" }, svg).textContent = minutes[i].slice(11, 16);
+  });
+  models.forEach(mod => {
+    const pts = minutes.map((mn, i) => {
+      const r = rows.find(z => z.model === mod && z.minute === mn);
+      return [x(i), y(r ? +r.runs : 0), r ? +r.runs : 0, mn];
+    });
+    el("polyline", { points: pts.map(p => p[0] + "," + p[1]).join(" "), fill: "none", stroke: color(mod), "stroke-width": 2, "stroke-linejoin": "round" }, svg);
+  });
+  const hit = el("rect", { x: m.l, y: m.t, width: W - m.l - m.r, height: H - m.t - m.b, fill: "transparent" }, svg);
+  hit.addEventListener("mousemove", e => {
+    const b = hit.getBoundingClientRect();
+    const i = Math.round(((e.clientX - b.left) / b.width) * (minutes.length - 1));
+    const mn = minutes[Math.max(0, Math.min(minutes.length - 1, i))];
+    const lines = models.map(mod => {
+      const r = rows.find(z => z.model === mod && z.minute === mn);
+      return `<div><i style="display:inline-block;width:8px;height:8px;background:${color(mod)};margin-right:5px"></i>${esc(mod)}: ${r ? r.runs : 0}</div>`;
+    });
+    showTip(e, `<b>${esc(mn.slice(11, 16))}</b>${lines.join("")}`);
+  });
+  hit.addEventListener("mouseleave", hideTip);
+}
+
+function renderConf(rows) {
+  const host = $("conf");
+  if (!rows.length) return empty(host, "no runs yet");
+  const roles = [...new Set(rows.map(r => r.role))].sort();
+  const buckets = [0, .1, .2, .3, .4, .5, .6, .7, .8, .9];
+  const W = 520, H = 220, m = { l: 34, r: 10, t: 8, b: 22 };
+  const svg = chartFrame(host, roles, W, H, m);
+  const totals = buckets.map(b => rows.filter(r => +r.bucket === b).reduce((s, r) => s + +r.runs, 0));
+  const max = Math.max(...totals, 1);
+  yAxis(svg, max, W, H, m, v => Math.round(v));
+  const bw = (W - m.l - m.r) / buckets.length;
+  buckets.forEach((b, i) => {
+    let acc = 0;
+    roles.forEach(role => {
+      const r = rows.find(z => z.role === role && +z.bucket === b);
+      const v = r ? +r.runs : 0;
+      if (!v) return;
+      const h = ((H - m.t - m.b) * v) / max;
+      const y = H - m.b - ((H - m.t - m.b) * (acc + v)) / max;
+      acc += v;
+      const rect = el("rect", { x: m.l + i * bw + 2, y: y + 1, width: bw - 4, height: Math.max(h - 2, 1), fill: color(role) }, svg);
+      rect.addEventListener("mousemove", e => showTip(e, `<b>${esc(role)}</b> ${b.toFixed(1)}–${(b + .1).toFixed(1)}: ${v}`));
+      rect.addEventListener("mouseleave", hideTip);
+    });
+    el("text", { x: m.l + i * bw + bw / 2, y: H - 6, "text-anchor": "middle" }, svg).textContent = b.toFixed(1);
+  });
+}
+
+function table(host, cols, rows, emptyMsg) {
+  if (!rows.length) return empty(host, emptyMsg);
+  const head = cols.map(c => `<th class="${c.num ? "num" : ""}">${esc(c.h)}</th>`).join("");
+  const body = rows.map(r => `<tr>${cols.map(c => `<td class="${c.num ? "num" : ""} ${c.cls || ""}">${c.f ? c.f(r) : esc(r[c.k])}</td>`).join("")}</tr>`).join("");
+  host.innerHTML = `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+}
+const t = v => esc(String(v).slice(11, 19));
+const pill = (v, cls) => `<span class="pill ${cls || ""}">${esc(v)}</span>`;
+
+function renderQuarantine(rows) {
+  table($("quarantine"), [
+    { h: "time", f: r => t(r.created_at) },
+    { h: "entity", k: "entity" },
+    { h: "claim", f: r => `<span class="snip">${esc(r.text)}</span>` },
+    { h: "conf", num: true, f: r => (+r.confidence).toFixed(2) },
+    { h: "status", f: r => pill(r.status, r.status === "quarantined" ? "bad" : "") },
+    { h: "judge", f: r => pill(r.judge_verdict, r.judge_verdict === "disagree" ? "bad" : "") },
+    { h: "reason", f: r => `<span class="snip">${esc(r.judge_reason)}</span>` },
+  ], rows, "nothing quarantined");
+}
+function renderInjections(rows) {
+  table($("injections"), [
+    { h: "time", f: r => t(r.ts) },
+    { h: "source", k: "source_id" },
+    { h: "detector", f: r => pill(r.detector) },
+    { h: "pattern", k: "pattern" },
+    { h: "snippet", f: r => `<span class="snip">${esc(r.snippet)}</span>` },
+    { h: "sev", num: true, f: r => pill((+r.severity).toFixed(2), +r.severity >= .8 ? "crit" : "bad") },
+  ], rows, "no injection events");
+}
+function renderMiscls(rows) {
+  const host = $("miscls");
+  if (!rows.length) return empty(host, "no judged runs yet");
+  host.innerHTML = rows.map(r => {
+    const rate = r.disagree_rate === null ? 0 : +r.disagree_rate;
+    return `<div style="margin:6px 0"><div style="display:flex;justify-content:space-between"><span>${esc(r.model)}</span><span>${(rate * 100).toFixed(1)}% <span style="color:var(--muted)">(${esc(r.disagreed)}/${esc(r.judged)})</span></span></div>
+      <div style="background:var(--grid);height:8px;border-radius:2px"><div style="width:${Math.min(rate * 100, 100)}%;height:8px;border-radius:2px;background:${color(r.model)}"></div></div></div>`;
+  }).join("");
+}
+function renderCost(rows) {
+  table($("cost"), [
+    { h: "model", f: r => `<i style="display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:6px;background:${color(r.model)}"></i>${esc(r.model)}` },
+    { h: "runs", num: true, k: "runs" },
+    { h: "prompt tok", num: true, k: "prompt_tokens" },
+    { h: "completion tok", num: true, k: "completion_tokens" },
+    { h: "cost $", num: true, f: r => (+r.cost_usd).toFixed(4) },
+  ], rows, "no cost data");
+}
+function renderTrust(rows) {
+  table($("trust"), [
+    { h: "source", k: "source_id" },
+    { h: "trust", num: true, f: r => pill((+r.trust).toFixed(2), +r.trust < .4 ? "crit" : +r.trust < .7 ? "bad" : "") },
+    { h: "updated", f: r => t(r.updated_at) },
+  ], rows, "no sources");
+}
+
+const panels = [
+  ["runs_per_minute_by_model", renderRuns], ["confidence_histogram", renderConf],
+  ["quarantine_queue", renderQuarantine], ["injection_recent", renderInjections],
+  ["misclassification_by_model", renderMiscls], ["cost_by_model", renderCost],
+  ["source_trust_current", renderTrust],
+];
+async function tick() {
+  const results = await Promise.allSettled(panels.map(([v]) => q(v)));
+  let failed = 0;
+  results.forEach((r, i) => {
+    if (r.status === "fulfilled") panels[i][1](r.value); else failed++;
+  });
+  const s = $("status");
+  s.className = failed ? "err" : "";
+  s.textContent = failed ? `ClickHouse error on ${failed} panel(s)` : `live · UTC times · updated ${new Date().toLocaleTimeString()}`;
+}
+tick();
+setInterval(tick, 2000);
+</script>
+</body>
+</html>
