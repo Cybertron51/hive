@@ -10,7 +10,7 @@ from typing import Any
 import yaml
 
 from hive.collectors._common import ROOT
-from hive.collectors.entities import match_entities
+from hive.collectors.entities import load_competitors, match_entities
 from hive.models import Claim, ClaimStatus, Detector, InjectionEvent, JudgeVerdict, RawDocument, Role, RunStatus
 from hive.swarm import policy
 from hive.swarm.orchestrator import SwarmResult
@@ -155,6 +155,13 @@ def score_fixtures(
             "statuses": dict(Counter(c.status.value for c in dclaims)),
         })
 
+    # fixture docs are fictional: any claim attributed to a real (live-tier) vendor is a misattribution
+    live_names = {c["name"] for c in load_competitors()["live"]}
+    fixture_ids = {d.doc_id for d in doc_by_fixture.values()}
+    misattributed = [c for c in result.claims if c.doc_id in fixture_ids and (c.entity in live_names or set(match_entities(c.entity)) & live_names)]
+    for c in misattributed:
+        failures.append(f"fixture claim attributed to REAL vendor {c.entity} ({fixture_of.get(c.doc_id)}, {c.status.value}): {c.text[:100]}")
+
     # doc-level classifier label
     cls_label = {r.doc_id: r.label for r in result.runs if r.role == Role.CLASSIFIER and r.status in (RunStatus.OK, RunStatus.QUARANTINED)}
     label_rows = []
@@ -283,6 +290,7 @@ def score_fixtures(
         "injection_fpr": _rate(fp, fp + tn),
         "planted_leaks": leaks,
         "verified_from_injected_docs": len(verified_from_injected),
+        "real_vendor_misattributions": len(misattributed),
         "judge_contradiction_accuracy": _rate(judge_ok, len(judge_rows)),
         "cost_usd_total": round(sum(r.cost_usd for r in result.runs), 6),
         "cost_usd_per_doc": round(statistics.mean(costs), 6) if costs else 0.0,

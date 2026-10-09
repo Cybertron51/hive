@@ -113,7 +113,7 @@ def test_competitors_config():
     ("Cloudflare (NYSE: NET) said", {"Cloudflare"}),
     ("FortiGate devices are being exploited", {"Fortinet"}),
     ("A new Auth0 feature", {"Okta"}),
-    ("Nullgrid Sentinel XDR 4.0 launched", {"Nullgrid Security"}),
+    ("Nullgrid XDR 4.0 launched", {"Nullgrid Security"}),
     ("the wizard said S and NET are words", set()),
     ("SentinelOne's report", {"SentinelOne"}),
 ])

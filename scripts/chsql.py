@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 from pathlib import Path
@@ -13,11 +14,22 @@ def statements(text: str) -> list[str]:
     return [s.strip() for s in re.split(r";[ \t]*(?:\n|$)", text) if s.strip()]
 
 
+def print_table(cols: list[str], rows: list[dict]) -> None:
+    cells = [[str(r[c]) for c in cols] for r in rows]
+    widths = [max([len(c)] + [len(row[i]) for row in cells]) for i, c in enumerate(cols)]
+    line = lambda parts: "│ " + " │ ".join(p.ljust(w) for p, w in zip(parts, widths)) + " │"
+    print(line(cols))
+    print("├─" + "─┼─".join("─" * w for w in widths) + "─┤")
+    for row in cells:
+        print(line(row))
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Run SQL against the ClickHouse in .env (local or Cloud)")
     ap.add_argument("-q", "--query", action="append", default=[], help="statement to run (repeatable)")
     ap.add_argument("--file", nargs="*", default=[], help="SQL files, run statement by statement")
     ap.add_argument("--format", default=None, help="output format for queries that return rows, e.g. PrettyCompact")
+    ap.add_argument("--stats", action="store_true", help="print rows as a table plus the server-side elapsed time")
     ap.add_argument("--db", default="default", help="database to connect to (default: default)")
     args = ap.parse_args()
 
@@ -35,7 +47,11 @@ def main() -> int:
     for sql in stmts:
         try:
             returns_rows = re.match(r"\s*(SELECT|SHOW|DESCRIBE|WITH|EXISTS)\b", sql, re.I) is not None
-            if returns_rows:
+            if returns_rows and args.stats:
+                doc = json.loads(client.raw_query(sql, fmt="JSON"))
+                print_table([m["name"] for m in doc["meta"]], doc["data"])
+                print(f"-- {doc['rows']} rows, server elapsed {doc['statistics']['elapsed'] * 1000:.0f} ms")
+            elif returns_rows:
                 out = client.raw_query(sql, fmt=args.format or "TabSeparated")
                 sys.stdout.write(out.decode("utf-8", "replace"))
             else:

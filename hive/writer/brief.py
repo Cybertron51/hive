@@ -79,6 +79,11 @@ def sources_md(citations: list[Citation]) -> list[str]:
     return ["", "## Sources", ""] + [f"{c.n}. {c.source_url or c.node_id or 'verified claim'}" for c in citations]
 
 
+def matches_entity(p: Passage, entity: str) -> bool:
+    e, pe = entity.lower(), p.entity.lower()
+    return bool(pe) and (pe == e or e in pe or pe in e)
+
+
 async def file_gap(run: AgentRun, question: str, entity: str, context: str, passages: list[Passage]) -> None:
     """Unanswered by verified claims: record it in Senso's gap report as an open question."""
     try:
@@ -106,6 +111,8 @@ async def write_brief(entity: str, question: str, model: str | None = None, swar
 
     try:
         passages = await get_kb().context(query)
+        if entity:
+            passages = [p for p in passages if matches_entity(p, entity)]
     except SensoError as e:
         run.status, run.error = RunStatus.ERROR, str(e)
         return Brief(entity=entity, question=question, markdown=f"# {entity}\n\nKnowledge base unavailable.\n", run=run)

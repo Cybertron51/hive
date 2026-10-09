@@ -9,3 +9,4 @@ for t in agent_runs claims injection_events source_trust heartbeats seen_docs; d
     docker exec "$CONTAINER" clickhouse-client -q "TRUNCATE TABLE IF EXISTS hive.$t"
   fi
 done
+rm -f data/seen.json

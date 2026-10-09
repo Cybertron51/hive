@@ -1,6 +1,8 @@
 # Hive
 
-Hive is competitive intelligence on security companies, run by a swarm of small agents on open-weight models, with a security layer that watches the swarm itself. On every heartbeat it collects press releases, vendor blogs, security news and SEC filings about a tracked competitor set (CrowdStrike, Palo Alto Networks, SentinelOne, Zscaler and others). Readers, classifiers and judges extract claims and verify them against each other. Every agent call is logged to ClickHouse, so prompt injection hidden in scraped pages, misclassification, low confidence and agent disagreement show up in real time and are quarantined before they reach a brief. Judged claims go into Senso, and the writer reads only claims tagged approved there. It produces cited competitor profiles and a "what changed since the last heartbeat" digest.
+Hive is a swarm of cheap open-weight agents that reads untrusted web pages all day, and ClickHouse watches the swarm itself so a poisoned blog post can't ship a fake breach into a brief.
+
+Here the swarm does competitive intelligence on security companies. On every heartbeat it collects press releases, vendor blogs, security news and SEC filings about a tracked competitor set (CrowdStrike, Palo Alto Networks, SentinelOne, Zscaler and others). Readers and classifiers extract claims. A claim is verified only when a judge on a different model confirms it against a second source, or grounds it in the original text when the source has a clean trust history. Every agent call is logged to ClickHouse. Injection screening is cheap patterns plus a canary, and the canary catches what the regex misses. Low confidence and agent disagreement show up in real time and are quarantined before they reach a brief. Judged claims go into Senso, and the writer reads only claims tagged approved there. It produces cited competitor profiles, a "what changed since the last heartbeat" digest and a landscape table.
 
 ## Architecture
 
@@ -11,7 +13,7 @@ heartbeat ─> collectors (RSS, EDGAR, pages, fixtures) ─> raw documents
                 │  safe_get: public IPs only, per-hop redirect checks, size cap
                 ▼
 swarm on AkashML: reader → classifier → judge        every call ──> ClickHouse
-                │          injection detector (patterns + canary)       │
+                │          injection screen: patterns + canary          │
                 ▼                                                       ▼
 judged claims ─> Senso shared-context (status:approved | draft)   dashboard + monitoring plane:
                 ▼                                                 quarantine, reroute, source trust

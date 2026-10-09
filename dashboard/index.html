@@ -53,11 +53,7 @@
 </header>
 <div id="hb" class="bar">Last heartbeat: loading…</div>
 <div id="summary" class="bar">loading…</div>
-<div id="legend" class="legend-row">
-  <span><i style="background:#0ca30c"></i><b>verified</b> judge agreed and confidence 0.75 or higher</span>
-  <span><i style="background:#ec835a"></i><b>quarantined</b> held back: judge disagreed, confidence under 0.6, or the source tried a prompt injection</span>
-  <span><i style="background:#3987e5"></i><b>rerouted</b> medium confidence, so the read was redone on the larger model</span>
-</div>
+<div id="legend" class="legend-row"></div>
 <main>
   <section class="wide"><h2>Swarm timeline: runs per 10s by status (latest swarm)</h2><div id="timeline"></div></section>
   <section class="wide"><h2>Verified claims feed</h2><div id="feed" class="tbl"></div></section>
@@ -72,6 +68,7 @@
   <section><h2>Source trust</h2><div id="trust" class="tbl"></div></section>
 </main>
 <div id="tip"></div>
+<script src="thresholds.js" onerror="window.HIVE_POLICY = window.HIVE_POLICY || {}"></script>
 <script>
 const PROXY = new URLSearchParams(location.search).get("proxy") === "1";
 const CH = PROXY ? "http://localhost:8765/query" : "http://localhost:8123/?default_format=JSON";
@@ -303,6 +300,20 @@ function renderHbLine() {
     `<b>${esc(lastHb.claims_verified)}</b> verified, <b>${esc(lastHb.claims_quarantined)}</b> quarantined, <b>$${(+lastHb.cost_usd).toFixed(4)}</b>`;
 }
 setInterval(renderHbLine, 1000);
+
+function renderLegend() {
+  const P = Object.assign({ QUARANTINE_SEVERITY: 0.6, TRUST_MIN_SEVERITY: 0.5, TRUST_PER_SEVERITY: 0.3, TRUST_PER_DISAGREE: 0.15,
+    MIN_CONFIDENCE: 0.6, VERIFY_CONFIDENCE: 0.75, GROUNDING_MIN_TRUST: 0.7 }, window.HIVE_POLICY || {});
+  const items = [
+    ["#0ca30c", "verified", `judge agreed and confidence at least ${P.VERIFY_CONFIDENCE}; a single-source claim verifies only if its source trust is at least ${P.GROUNDING_MIN_TRUST}`],
+    ["#ec835a", "quarantined", `judge disagreed, confidence under ${P.MIN_CONFIDENCE}, or its source had an injection event of severity ${P.QUARANTINE_SEVERITY} or more`],
+    ["#3987e5", "rerouted", `confidence between ${P.MIN_CONFIDENCE} and ${P.VERIFY_CONFIDENCE}, so the read was redone on the larger model`],
+    ["#898781", "trust", `1 minus ${P.TRUST_PER_SEVERITY} x severity per injection event of ${P.TRUST_MIN_SEVERITY}+ (once per doc and pattern), minus ${P.TRUST_PER_DISAGREE} per judge disagreement`],
+  ];
+  $("legend").innerHTML = items.map(([c, k, t]) => `<span><i style="background:${c}"></i><b>${k}</b>${esc(t)}</span>`).join("");
+}
+renderLegend();
+
 
 const STATUSES = [["ok", "#0ca30c"], ["malformed", "#fab219"], ["quarantined", "#ec835a"], ["rerouted", "#3987e5"], ["error", "#d03b3b"]];
 

@@ -15,7 +15,7 @@ from hive.config import settings
 from hive.llm import chat_json
 from hive.models import AgentRun, Role, RunStatus
 from hive.senso.client import Passage, SensoError, get_kb, parse_meta
-from hive.writer.brief import Brief, Citation, brief_path, cited_sentences, citations_for, file_gap, sources_md
+from hive.writer.brief import Brief, Citation, brief_path, cited_sentences, citations_for, file_gap, matches_entity, sources_md
 from hive.writer.vocab import CLAIM_TYPES, PROFILE_GUIDANCE, PROFILE_SECTIONS, label
 
 OUT_DIR = Path("docs/briefs")
@@ -53,9 +53,7 @@ def _dedupe(groups: list[list[Passage]]) -> list[Passage]:
     return out
 
 
-def _matches(p: Passage, entity: str) -> bool:
-    e, pe = entity.lower(), p.entity.lower()
-    return bool(pe) and (pe == e or e in pe or pe in e)
+_matches = matches_entity
 
 
 async def _gather_context(queries: list[str]) -> list[Passage]:

@@ -3,7 +3,14 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 
 PAUSE=0
-[ "${1:-}" = "--pause" ] && PAUSE=1
+ONE=0
+for a in "$@"; do
+  case "$a" in
+    --pause) PAUSE=1 ;;
+    --one) ONE=1 ;;
+    *) echo "usage: scripts/stage_queries.sh [--pause] [--one]"; exit 2 ;;
+  esac
+done
 
 source scripts/_ch_mode.sh
 
@@ -66,6 +73,25 @@ GROUP BY entity
 ORDER BY verified DESC, total DESC
 LIMIT 15
 SQL
+
+if [ "$ONE" = 1 ]; then
+  printf '\n\033[1m%s\033[0m\n' "3. What the swarm costs: latency p50/p95 and spend per model and role"
+  if [ "$IS_CLOUD" = 1 ]; then
+    $PY scripts/chsql.py --db hive --format PrettyCompact --stats -q "$Q3"
+    rows=$($PY scripts/chsql.py --db hive -q "SELECT count() FROM hive.agent_runs" | tr -d '[:space:]')
+  else
+    pw=$(envval CLICKHOUSE_PASSWORD)
+    envargs=(); [ -n "$pw" ] && envargs=(-e CLICKHOUSE_USER=default -e CLICKHOUSE_PASSWORD)
+    out=$(CLICKHOUSE_PASSWORD="$pw" docker exec -i "${envargs[@]}" "$CONTAINER" clickhouse-client --format PrettyCompact --time -q "$Q3" 2>&1)
+    secs=$(echo "$out" | tail -1)
+    echo "$out" | sed '$d'
+    echo "-- server elapsed $(awk -v s="$secs" 'BEGIN{printf "%.0f", s*1000}') ms"
+    rows=$(ch "SELECT count() FROM hive.agent_runs" 2>&1 | grep -Eo '[0-9]+' | head -1)
+  fi
+  echo
+  echo "$rows agent runs scanned"
+  exit 0
+fi
 
 run "1. Which model does the judge disagree with most? (latest swarm with judged claims)" "$Q1"
 run "2. Prompt injection caught in the wild: source, detector, pattern and the hostile text" "$Q2"

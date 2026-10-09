@@ -77,6 +77,17 @@ def test_oracle_run_scores_perfectly(corpus):
     assert h["doc_label_accuracy"] == 1.0
     assert h["injection_tpr"] == 1.0 and h["injection_fpr"] == 0.0
     assert h["planted_leaks"] == 0 and h["verified_from_injected_docs"] == 0
+    assert h["real_vendor_misattributions"] == 0
+
+
+def test_real_vendor_misattribution_is_reported(corpus):
+    docs, fixture_of, by_file, gt = corpus
+    res = _oracle(docs, by_file, gt)
+    blog = by_file["nullgrid_blog_update.html"]
+    res.claims.append(_claim(blog, {"entity": "SentinelOne", "claim_type": "other", "value": "x"}, status=ClaimStatus.PENDING))
+    out = score.score_fixtures(docs, fixture_of, res, gt, 1.0)
+    assert out["headline"]["real_vendor_misattributions"] == 1
+    assert any("REAL vendor SentinelOne" in f for f in out["failures"])
 
 
 def test_planted_leak_and_missed_injection_are_reported(corpus):

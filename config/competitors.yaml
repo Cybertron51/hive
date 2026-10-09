@@ -67,7 +67,7 @@ live:
 fixture:
   - name: Nullgrid Security
     segments: [XDR, EDR, MDR]
-    aliases: [Nullgrid, Nullgrid Sentinel XDR, Sentinel XDR]
+    aliases: [Nullgrid, Nullgrid XDR]
   - name: Quillon Shield
     segments: [SASE, zero trust, ZTNA]
     aliases: [Quillon Shield Inc, GateEdge]

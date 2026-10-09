@@ -15,7 +15,7 @@ All vendors, people, publications, advisories and filings here are **fictional**
 
 | Claim type | Vendor | Fact | Source file(s) |
 |---|---|---|---|
-| product_launch | Nullgrid Security | Sentinel XDR 4.0 GA, autonomous triage agent (2026-09-15) | `nullgrid_product_launch.html`, roundup |
+| product_launch | Nullgrid Security | Nullgrid XDR 4.0 GA, autonomous triage agent (2026-09-15) | `nullgrid_product_launch.html`, roundup |
 | pricing | Nullgrid Security | $18/endpoint/month Standard, $29 Complete (incl. MDR) | `nullgrid_product_launch.html`, roundup |
 | personnel | Nullgrid Security | Daniel Asante CISO from 2026-08-18 (ex-Kestrel); Priya Nandakumar becomes CTO | `nullgrid_personnel.html` |
 | funding | Quillon Shield | $450M private placement led by Halberd Growth Equity (2026-09-22) | press release, 8-K (news says $45M: wrong) |

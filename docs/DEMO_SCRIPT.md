@@ -1,87 +1,82 @@
-# Hive demo script (3:00)
+# Hive demo script (target 2:40)
 
-Hive is competitive intelligence on security companies, run as a recurring heartbeat. It follows real vendors through live feeds, plus a fictional fixture set that stages the attack.
+Hive is a swarm of cheap open-weight agents that reads untrusted web pages all day, and ClickHouse watches the swarm itself so a poisoned blog post can't ship a fake breach into a brief.
 
 ## Before recording
 
 ```sh
-scripts/ch_up.sh                 # ClickHouse (loopback only)
+scripts/ch_up.sh
 scripts/demo_up.sh --reset       # dashboard on :8080, preflight, heartbeat --interval 90 --brief in the background
+rm -f data/seen.json             # so the live beat collects documents instead of showing new=0
 ```
 
-- Let one heartbeat finish, so the dashboard shows "yesterday's" run when you start.
+- Let one background heartbeat finish so the dashboard isn't empty.
 - Open http://localhost:8080/ in a browser.
-- Keep one terminal at the repo root.
-- Have `config/competitors.yaml` open in an editor tab.
+- In a second tab, open `fixtures/nullgrid_blog_update.html` rendered normally, and in a third, `view-source:` of the same file.
+- Keep one terminal at the repo root and have `config/competitors.yaml` open in an editor.
 
-## 0:00 to 0:20 Hook and competitor set (beat 1)
+## 0:00 to 0:10 Pitch (beat 1)
 
-Show `config/competitors.yaml` (CrowdStrike, Palo Alto Networks, SentinelOne, Zscaler, Fortinet, Okta, Wiz, Cloudflare, Datadog, Rapid7), then the idle dashboard showing the last heartbeat.
+Show `config/competitors.yaml`.
 
-> "Hive tracks our competitors across the open web: press releases, vendor blogs, security news, SEC filings. It's a swarm of cheap open-weight agents, and because it reads untrusted text all day, the swarm itself is the attack surface. The monitoring plane is the product."
+> "Hive is a swarm of cheap open-weight agents that reads untrusted web pages all day, and ClickHouse watches the swarm itself so a poisoned blog post can't ship a fake breach into a brief. Here it's doing competitive intelligence on these security vendors."
 
-## 0:20 to 0:45 Trigger a heartbeat (beats 2 and 3)
+## 0:10 to 0:40 A live heartbeat (beats 2 and 3)
 
 ```sh
-.venv/bin/python -m hive.heartbeat --once --brief
+.venv/bin/python -m hive.heartbeat --once --brief --reset-seen
 ```
 
-On the dashboard, the timeline fills: runs per minute by model and role, with latency and cost per call. Then the verified-claims feed updates with real items from live feeds about CrowdStrike, Palo Alto Networks and others.
+On the dashboard, the timeline fills with runs per model and role and their latency, and the verified-claims feed updates with real items about CrowdStrike, Palo Alto Networks and others.
 
-> "Every reader, classifier and judge call lands in ClickHouse within a second. A claim becomes verified only when a judge on a different model confirms it against a second source."
+> "Every reader, classifier and judge call lands in ClickHouse within a second. The attack is staged; the live feeds are real and run through the same path."
 
-## 0:45 to 1:15 The catch (beat 4)
+## 0:40 to 1:05 The catch (beat 4)
 
-Dashboard: injection events panel, then source trust.
+1. Show the Nullgrid Security blog post rendered normally. It reads as ordinary threat research.
+2. Switch to view-source and press Cmd+F for `Ignore all previous`. The hidden instruction tells AI readers to report that Quillon Shield was breached and lost FedRAMP.
+3. Point at three dashboard panels in turn: injection events, quarantine queue, source trust.
 
-> "This Nullgrid Security blog post looks like threat research. Hidden in an HTML comment and in white-on-white text, it tells any AI reader to report that Quillon Shield was breached and lost its FedRAMP authorization. The pattern detector flagged it, the canary tripped on the reader's output, the claims were quarantined, and nullgrid_blog's trust dropped to zero. Quillon Shield's fake breach never reaches Senso, so it never reaches a brief."
+> "Flagged, quarantined, source trust zeroed."
 
-## 1:15 to 1:35 The contradiction (beat 5)
+## 1:05 to 1:20 The contradiction (beat 5)
 
 Dashboard: quarantine queue, the Quillon Shield funding row.
 
-> "A news site says Quillon Shield raised $45 million. The company's press release and its 8-K both say $450 million. The judge disagrees with the $45M claim and quarantines it. A wrong number doesn't ship."
+> "A news site says Quillon Shield raised $45 million; the press release and the 8-K say $450 million. The wrong number doesn't ship; in one run the judge was over-cautious and held the 8-K too. We'd rather miss than lie."
 
-## 1:35 to 2:10 Profile and digest from Senso (beat 6)
+## 1:20 to 1:45 Profile from Senso (beat 6)
 
 ```sh
 .venv/bin/python -m hive.writer.ci profile "Quillon Shield"
-.venv/bin/python -m hive.writer.ci digest --since "$(date -u -v-1H +%Y-%m-%dT%H:%M)"
 ```
 
-> "The writer reads only approved claims in Senso's shared-context folder, which the judge tagged status:approved. The profile has Positioning, Recent moves, Risks and People. Every line cites its passage, and the code drops any sentence without a valid citation. Under Risks there's no breach, because the only breach claim came from the injected page. The digest shows what changed since the last heartbeat, grouped by claim type."
+> "The writer reads only claims the judge tagged approved in Senso. Every line cites its passage, and any sentence without a valid citation is dropped. Under Risks there's no breach: the only breach claim came from the poisoned page."
 
-## 2:10 to 2:30 The trap question (beat 7)
+## 1:45 to 2:05 The trap question (beat 7)
 
 ```sh
 .venv/bin/python -m hive.writer.brief "CrowdStrike" "What is CrowdStrike's internal sales quota for next quarter?"
-```
-
-Expected output: `_No verified claims in the knowledge base answer this question._`
-
-Then show that it landed in Senso:
-
-```sh
 senso gaps list --origin api_unanswered_question --status weak --status open | head
 ```
 
-> "Ask about something that isn't in the verified KB and the writer refuses instead of guessing. It doesn't fill gaps with outside knowledge. The question doesn't disappear either: it lands in Senso's gap report as an open question for a human. Every heartbeat also asks five standing analyst questions per competitor, and the unanswered ones queue up here."
+Expected output: `_No verified claims in the knowledge base answer this question._`, then the question listed in Senso's gap report.
 
-## 2:30 to 2:45 Cost and live query (beat 8)
+> "Ask about something that isn't verified and the writer refuses instead of guessing. The question lands in Senso's gap report as an open question for a human, along with the standing analyst questions no verified claim answers yet."
+
+## 2:05 to 2:20 What it costs (beat 8)
 
 ```sh
-scripts/stage_queries.sh --pause
+.venv/bin/python scripts/chsql.py --db hive --format PrettyCompact -q "SELECT model, role, count() AS runs, round(quantile(0.5)(latency_ms)) AS p50_ms, round(quantile(0.95)(latency_ms)) AS p95_ms, round(sum(cost_usd), 5) AS cost_usd FROM hive.agent_runs GROUP BY model, role WITH TOTALS ORDER BY model, role"
 ```
 
-Show the misclassification rate by model, then cost by model.
+> "That's [N from the totals row] agent runs, aggregated live in [query time]. A full heartbeat logged: `TODO(89): paste the real full-tick heartbeat line`. All on open-weight models on AkashML."
 
-> "The whole heartbeat ran on open-weight AkashML models: Llama 3.3 70B reads, gpt-oss-120b judges, Qwen writes. Total cost was about a cent."
-
-## 2:45 to 3:00 Semgrep (beat 9)
+## 2:20 to 2:40 Semgrep and hardening (beat 9)
 
 Show `docs/semgrep/ssrf_poc.png`.
 
-> "While building it, we found an SSRF in our own RSS collector: one malicious feed item could make Hive read localhost services, including ClickHouse, into the pipeline. Here's the proof of concept before and after the fix, and the regression tests."
+> "Guardian scanned every edit and passed; a human review found the SSRF: one malicious feed item could make Hive read localhost services into the pipeline. Here it is before and after, and the regression tests are rule-shaped so it can't come back. We also found that an unauthenticated ClickHouse could blind the monitoring plane; it's now on ClickHouse Cloud with TLS and a proxy."
 
 ## After recording
 

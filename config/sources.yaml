@@ -7,7 +7,7 @@ sources:
 - source_id: nullgrid_newsroom
   kind: fixture
   path: fixtures/nullgrid_product_launch.html
-  url: https://nullgrid.example/news/sentinel-xdr-4
+  url: https://nullgrid.example/news/nullgrid-xdr-4
   tier: fixture
   entities:
   - Nullgrid Security
