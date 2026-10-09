@@ -254,6 +254,7 @@ function renderFeed(rows) {
     { h: "entity", f: r => `<b>${esc(r.entity)}</b>` },
     { h: "type", f: r => pill(r.claim_type) },
     { h: "claim", f: r => `<span class="snip">${r.value ? `<b>${esc(r.value)}</b> ` : ""}<span style="color:var(--muted)">${esc(r.text)}</span></span>` },
+    { h: "kind", f: r => pill(r.kind || "?") },
     { h: "source", k: "source_id" },
     { h: "conf", num: true, f: r => (+r.confidence).toFixed(2) },
   ], rows, "no verified claims yet");

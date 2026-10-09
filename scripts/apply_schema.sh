@@ -6,6 +6,7 @@ source scripts/_ch_mode.sh
 RO_PASSWORD=$(envval CLICKHOUSE_RO_PASSWORD)
 if [ "$IS_CLOUD" = 1 ]; then
   $PY scripts/chsql.py --file clickhouse/schema.sql clickhouse/queries.sql
+  $PY scripts/sync_sources.py | $PY scripts/chsql.py --file /dev/stdin
   if [ -z "$RO_PASSWORD" ]; then
     echo "NOTE: CLICKHOUSE_RO_PASSWORD not set in .env, skipping the read-only dashboard user on Cloud"
     exit 0
@@ -25,6 +26,7 @@ if [ "$IS_CLOUD" = 1 ]; then
 else
   RO_PASSWORD=${RO_PASSWORD:-hive-dashboard-ro}
   cat clickhouse/schema.sql clickhouse/queries.sql | docker exec -i "$CONTAINER" clickhouse-client -n
+  $PY scripts/sync_sources.py | docker exec -i "$CONTAINER" clickhouse-client -n
   docker exec -i "$CONTAINER" clickhouse-client -n <<SQL
 CREATE USER IF NOT EXISTS dashboard IDENTIFIED BY '$RO_PASSWORD' SETTINGS readonly = 1, add_http_cors_header = 1;
 ALTER USER dashboard IDENTIFIED BY '$RO_PASSWORD' SETTINGS readonly = 1, add_http_cors_header = 1;

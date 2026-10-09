@@ -47,7 +47,7 @@ On the dashboard, the timeline fills with runs per model and role and their late
 
 Dashboard: quarantine queue, the Quillon Shield funding row.
 
-> "A news site says Quillon Shield raised $45 million; the press release and the 8-K say $450 million. The wrong number doesn't ship; in one run the judge was over-cautious and held the 8-K too. We'd rather miss than lie."
+> "A news site says Quillon Shield raised $45 million; the press release and the 8-K say $450 million. The wrong number doesn't ship; the judge can be over-cautious and held the true 8-K too; we'd rather miss than lie."
 
 ## 1:20 to 1:45 Profile from Senso (beat 6)
 

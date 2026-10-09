@@ -31,7 +31,7 @@ else
   if [ "$(curl -s -m 3 "$CH/ping" 2>/dev/null)" = "Ok." ]; then pass "HTTP :8123 responds"; else fail "HTTP :8123 not responding"; fi
 fi
 
-TABLES="agent_runs claims injection_events source_trust heartbeats seen_docs"
+TABLES="agent_runs claims injection_events source_trust heartbeats seen_docs source_kinds"
 VIEWS="latest_swarm runs_per_minute_by_model confidence_histogram quarantine_queue claims_by_status injection_recent injection_counts misclassification_by_model cost_by_model source_trust_current runs_timeline heartbeats_recent verified_claims_feed claims_by_entity"
 have=$(chq "SELECT name FROM system.tables WHERE database = 'hive'")
 if [ -z "$have" ]; then

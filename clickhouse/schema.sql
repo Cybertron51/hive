@@ -101,3 +101,13 @@ CREATE TABLE IF NOT EXISTS hive.seen_docs
 )
 ENGINE = ReplacingMergeTree(first_seen)
 ORDER BY url_hash;
+
+CREATE TABLE IF NOT EXISTS hive.source_kinds
+(
+    source_id  String,
+    kind       LowCardinality(String),
+    tier       LowCardinality(String),
+    updated_at DateTime64(3, 'UTC') DEFAULT now64(3)
+)
+ENGINE = ReplacingMergeTree(updated_at)
+ORDER BY source_id;

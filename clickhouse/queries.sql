@@ -146,12 +146,15 @@ SELECT
     c.value AS value,
     c.text AS text,
     c.source_id AS source_id,
+    ifNull(k.kind, '') AS kind,
     c.confidence AS confidence,
     c.senso_node_id AS senso_node_id
 FROM hive.claims AS c FINAL
 LEFT JOIN (SELECT run_id, any(swarm_id) AS swarm_id FROM hive.agent_runs GROUP BY run_id) AS r ON c.run_id = r.run_id
-WHERE c.status = 'verified'
+LEFT JOIN (SELECT source_id, argMax(kind, updated_at) AS kind FROM hive.source_kinds GROUP BY source_id) AS k ON c.source_id = k.source_id
+WHERE c.status = 'verified' AND c.claim_type != 'other'
 ORDER BY c.created_at DESC
+LIMIT 1 BY c.entity, c.claim_type, if(c.value = '', c.text, c.value)
 LIMIT 500;
 
 CREATE OR REPLACE VIEW hive.claims_by_entity AS
