@@ -74,7 +74,7 @@ Expected output: `_No verified claims in the knowledge base answer this question
 scripts/stage_queries.sh --one
 ```
 
-> "That's [N, from the 'agent runs scanned' line] agent runs, aggregated live in [server elapsed] milliseconds. A full heartbeat over 96 documents made 745 model calls and cost thirteen cents, all on open-weight models on AkashML."
+> "That's [N, from the 'agent runs scanned' line] agent runs, aggregated live in [server elapsed] milliseconds. And the full feed set: 96 documents, 745 model calls, 13 cents. All on open-weight models on AkashML."
 
 For reference, the log line behind that sentence is `[13:11:55] heartbeat new=96/96 runs=745 verified=285 quarantined=25 injections=10 cost=$0.1328 dur=582.3s status=ok`.
 

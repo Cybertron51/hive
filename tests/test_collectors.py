@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 
+import httpx
 import pytest
 
 from hive.collectors import collect_all, load_sources
@@ -361,3 +362,48 @@ async def test_fixtures_lead_deterministically_so_limit_keeps_the_demo_docs(monk
     assert seen == rss_ids
     assert any(d.url.endswith("/blog/q3-edge-telemetry") for d in docs[:40])
     assert {"quillon_newsroom", "cyber_ledger", "edgar_mirror"} <= {d.source_id for d in docs[:40]}
+
+
+async def test_sec_get_retries_timeouts_and_caps_inflight(monkeypatch):
+    from hive.collectors import edgar
+
+    monkeypatch.setattr(edgar, "SEC_MIN_INTERVAL", 0.0)
+    monkeypatch.setattr(edgar, "SEC_BACKOFF_S", 0.001)
+    calls, inflight, peak = {}, 0, 0
+
+    async def flaky(client, url, **kw):
+        nonlocal inflight, peak
+        inflight += 1
+        peak = max(peak, inflight)
+        try:
+            await asyncio.sleep(0.01)
+            calls[url] = calls.get(url, 0) + 1
+            if url.endswith("/flaky") and calls[url] < 3:
+                raise httpx.ReadTimeout("")
+            if url.endswith("/missing"):
+                req = httpx.Request("GET", url)
+                raise httpx.HTTPStatusError("404", request=req, response=httpx.Response(404, request=req))
+            return url, b"ok", "text/plain"
+        finally:
+            inflight -= 1
+
+    monkeypatch.setattr(edgar, "safe_get", flaky)
+    assert (await edgar._sec_get(None, "https://www.sec.gov/flaky"))[1] == b"ok"
+    assert calls["https://www.sec.gov/flaky"] == 3
+    with pytest.raises(httpx.HTTPStatusError):
+        await edgar._sec_get(None, "https://www.sec.gov/missing")
+    assert calls["https://www.sec.gov/missing"] == 1
+    await asyncio.gather(*(edgar._sec_get(None, f"https://www.sec.gov/doc{i}") for i in range(20)))
+    assert peak <= edgar.SEC_MAX_INFLIGHT
+
+
+def test_sec_limiter_survives_new_event_loops():
+    from hive.collectors import edgar
+
+    async def use():
+        lim = edgar._limiter()
+        async with lim.lock:
+            pass
+        return lim
+
+    assert asyncio.run(use()) is not asyncio.run(use())

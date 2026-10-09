@@ -38,7 +38,7 @@ async def _safe_collect(source: dict) -> list[RawDocument]:
     try:
         return await fn(source)
     except Exception as e:
-        log.warning("collector failed for %s (%s): %s", source.get("source_id"), source.get("kind"), e)
+        log.warning("collector failed for %s (%s): %s: %r", source.get("source_id"), source.get("kind"), type(e).__name__, e)
         return []
 
 

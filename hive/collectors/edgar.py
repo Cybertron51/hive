@@ -6,9 +6,12 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
+import random
 import re
 import time
+import weakref
 
 import httpx
 from lxml import etree
@@ -29,25 +32,73 @@ SEC_MIN_INTERVAL = 0.125
 _ADSH = re.compile(r"^\d{10}-\d{2}-\d{6}$")
 _FILENAME = re.compile(r"^[A-Za-z0-9._-]+$")
 _EX99 = re.compile(r"ex-?99|dex99", re.IGNORECASE)
+log = logging.getLogger(__name__)
 
-_locks: dict[int, asyncio.Lock] = {}
-_last_request = 0.0
+SEC_MAX_INFLIGHT = 4
+SEC_ATTEMPTS = 3
+SEC_BACKOFF_S = 1.0
+SEC_MAX_RETRY_AFTER_S = 10.0
+SEC_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
+_RETRY_STATUS = {429, 500, 502, 503, 504}
+
+
+class _Limiter:
+    def __init__(self) -> None:
+        self.lock = asyncio.Lock()
+        self.inflight = asyncio.Semaphore(SEC_MAX_INFLIGHT)
+        self.last = 0.0
+
+
+_limiters: "weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, _Limiter]" = weakref.WeakKeyDictionary()
+
+
+def _limiter() -> _Limiter:
+    loop = asyncio.get_running_loop()
+    lim = _limiters.get(loop)
+    if lim is None:
+        lim = _limiters[loop] = _Limiter()
+    return lim
+
+
+def _retry_delay(attempt: int, exc: Exception) -> float | None:
+    """Seconds to wait before retrying, or None if exc is not retryable."""
+    if isinstance(exc, httpx.HTTPStatusError):
+        if exc.response.status_code not in _RETRY_STATUS:
+            return None
+        ra = exc.response.headers.get("retry-after", "")
+        if ra.isdigit():
+            return min(float(ra), SEC_MAX_RETRY_AFTER_S)
+    elif not isinstance(exc, (httpx.TimeoutException, httpx.TransportError)):
+        return None
+    return SEC_BACKOFF_S * (2 ** attempt) + random.uniform(0, 0.25)
 
 
 async def _sec_get(client: httpx.AsyncClient, url: str, **kw) -> tuple[str, bytes, str]:
-    """SEC fair-access: at most ~8 requests/second across all EDGAR sources in this event loop."""
-    global _last_request
-    lock = _locks.setdefault(id(asyncio.get_running_loop()), asyncio.Lock())
-    async with lock:
-        wait = SEC_MIN_INTERVAL - (time.monotonic() - _last_request)
-        if wait > 0:
-            await asyncio.sleep(wait)
-        _last_request = time.monotonic()
-    return await safe_get(client, url, allowed_hosts=ALLOWED_HOSTS, **kw)
+    """SEC fair-access: requests start at most ~8/second and at most SEC_MAX_INFLIGHT run at once across
+    all EDGAR sources in this event loop. Timeouts, transport errors, 429 and 5xx are retried with backoff."""
+    lim = _limiter()
+    for attempt in range(SEC_ATTEMPTS):
+        try:
+            async with lim.inflight:
+                async with lim.lock:
+                    wait = SEC_MIN_INTERVAL - (time.monotonic() - lim.last)
+                    if wait > 0:
+                        await asyncio.sleep(wait)
+                    lim.last = time.monotonic()
+                return await safe_get(client, url, allowed_hosts=ALLOWED_HOSTS, **kw)
+        except Exception as exc:
+            delay = _retry_delay(attempt, exc)
+            if delay is None or attempt == SEC_ATTEMPTS - 1:
+                raise
+            log.info("SEC %s failed (%s: %r), retry %d in %.1fs", url, type(exc).__name__, exc, attempt + 1, delay)
+            await asyncio.sleep(delay)
+    raise RuntimeError("unreachable")
 
 
 def _client() -> httpx.AsyncClient:
-    return make_client(**{"User-Agent": os.environ.get("SEC_USER_AGENT", USER_AGENT)})
+    client = make_client(**{"User-Agent": os.environ.get("SEC_USER_AGENT", USER_AGENT)})
+    client.timeout = SEC_TIMEOUT
+    return client
 
 
 def _archive_url(cik, adsh: str, filename: str) -> str:
