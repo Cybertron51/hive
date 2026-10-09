@@ -66,8 +66,20 @@ Expected: findings on `docs/semgrep/vuln_rss.py` (the original), none on `hive/c
 | Rule | Location | Severity |
 | --- | --- | --- |
 | `hive-httpx-follow-redirects-unvalidated` | `docs/semgrep/vuln_rss.py:19` | WARNING |
-Run on 2026-10-09 with `semgrep` via `uv tool run` against the original collector and the three fixed collectors: 1 findings, 0 errors. Every finding is in the original file; the fixed collectors are clean.
+| `hive-httpx-follow-redirects-unvalidated` | `docs/semgrep/vuln_rss_inline.py:8` | WARNING |
+| `hive-untrusted-feed-link-ssrf` | `docs/semgrep/vuln_rss_inline.py:14` | ERROR |
 
+Run on 2026-10-09 with Semgrep OSS via `uv tool run semgrep` against the original collector, an inlined
+variant of it, and the three fixed collectors: 3 findings, 0 errors. The fixed
+collectors are clean.
+
+**Limitation, stated plainly.** Semgrep OSS taint tracking is intraprocedural. The original
+`vuln_rss.py` passes the feed link into a helper, `_fetch_article(client, url)`, so the taint rule
+cannot follow it across the call and reports only the `follow_redirects=True` warning there. On
+`vuln_rss_inline.py`, the same bug with the fetch inlined, the taint rule fires as an ERROR. Catching
+the helper-function form needs interprocedural taint (Semgrep Pro), or a second rule that treats
+"tainted feed link passed to any function alongside an HTTP client" as a sink, which we judged too
+noisy for the fixed code that also routes links through a helper. Guardian saw neither form.
 
 ## The fix, for reference
 
