@@ -66,7 +66,9 @@ def _fixture_section(fx: dict[str, Any]) -> list[str]:
         "",
     ]
     if fx["mode"] == "dry-run":
-        out += ["> Dry run uses the deterministic FakeLLM. It checks that the harness works end to end; the numbers say nothing about model quality.", ""]
+        out += ["> Dry run uses the deterministic FakeLLM. It checks that the harness works end to end; the numbers say nothing about model quality.",
+                "> In particular, the FakeLLM judge only says 'disagree' when evidence contains words like 'denied' or 'failed', so it can never "
+                "catch the numeric $45M vs $450M contradiction. A planted $45M leak in a dry run is expected and says nothing about the real judge.", ""]
     out.append("### Headline")
     out.append("")
     if len(runs) == 1:

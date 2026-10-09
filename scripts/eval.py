@@ -75,7 +75,21 @@ def _require_live() -> None:
         sys.exit("--live needs AKASHML_API_KEY in .env (use --dry-run for a free structural check)")
 
 
-async def eval_fixtures(mode: str, repeat: int, concurrency: int) -> dict:
+def _swarm_kwargs(concurrency: int | None) -> dict:
+    kw = {"telemetry": False, "ingest": False}
+    if concurrency:
+        kw["concurrency"] = concurrency
+    return kw
+
+
+DRY_RUN_CAVEAT = (
+    "Dry-run caveat: the FakeLLM judge only says 'disagree' when evidence contains words like 'denied' or 'failed', "
+    "so it can never catch the numeric $45M vs $450M contradiction. A planted $45M leak in a dry run is expected and "
+    "says nothing about the real judge; use --live for that."
+)
+
+
+async def eval_fixtures(mode: str, repeat: int, concurrency: int | None) -> dict:
     gt = score.load_ground_truth()
     docs = await collect_all(SOURCES, kinds={"fixture"})
     url_to_file = {s["url"]: Path(s["path"]).name for s in load_sources(SOURCES) if s["kind"] == "fixture"}
@@ -87,7 +101,7 @@ async def eval_fixtures(mode: str, repeat: int, concurrency: int) -> dict:
     runs, models = [], set()
     for i in range(repeat):
         t0 = time.perf_counter()
-        result = await run_swarm(docs, concurrency=concurrency, telemetry=False, ingest=False)
+        result = await run_swarm(docs, **_swarm_kwargs(concurrency))
         wall = time.perf_counter() - t0
         models |= {r.model for r in result.runs}
         scored = score.score_fixtures(docs, fixture_of, result, gt, wall)
@@ -99,10 +113,10 @@ async def eval_fixtures(mode: str, repeat: int, concurrency: int) -> dict:
     return {"mode": mode, "generated_at": _now(), "models": sorted(models), "docs": len(docs), "runs": runs}
 
 
-async def eval_sources(live: bool, concurrency: int) -> dict:
+async def eval_sources(live: bool, concurrency: int | None) -> dict:
     docs = await collect_all(SOURCES, kinds={"rss", "edgar"})
     if live:
-        result = await run_swarm(docs, concurrency=concurrency, telemetry=False, ingest=False)
+        result = await run_swarm(docs, **_swarm_kwargs(concurrency))
         events = result.injection_events
         cost = round(sum(r.cost_usd for r in result.runs), 6)
     else:
@@ -131,7 +145,7 @@ def main(argv: list[str] | None = None) -> int:
     mode.add_argument("--live", action="store_true", help="use the real AkashML models")
     ap.add_argument("--sources", action="store_true", help="scan live feeds for injection false positives instead of the fixtures")
     ap.add_argument("--repeat", type=int, default=1, help="fixture runs to average (live models vary run to run)")
-    ap.add_argument("--concurrency", type=int, default=8)
+    ap.add_argument("--concurrency", type=int, default=None, help="default: run_swarm's own default")
     ap.add_argument("--no-cache", action="store_true", help="bypass the collector article cache (sets HIVE_NO_CACHE=1)")
     ap.add_argument("--render", action="store_true", help="rebuild docs/EVAL.md from the saved JSON results, no model calls")
     args = ap.parse_args(argv)
@@ -179,6 +193,8 @@ def main(argv: list[str] | None = None) -> int:
         written = "docs/EVAL.md and docs/eval/latest.json"
 
     _print_fixture_summary(fx)
+    if args.dry_run:
+        print(f"\n{DRY_RUN_CAVEAT}")
     print(f"\nwrote {written}")
     leaked = args.live and any(r["headline"]["planted_leaks"] or r["headline"]["verified_from_injected_docs"] for r in fx["runs"])
     if leaked:
