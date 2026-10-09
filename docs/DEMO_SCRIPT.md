@@ -14,6 +14,8 @@ rm -f data/seen.json             # so the live beat collects documents instead o
 - Open http://localhost:8080/ in a browser.
 - In a second tab, open `fixtures/nullgrid_blog_update.html` rendered normally, and in a third, `view-source:` of the same file.
 - Keep one terminal at the repo root and have `config/competitors.yaml` open in an editor.
+- Terminal at 1280x800, 18pt. Run `clear` before each command: the beat 6 profile is about 29 lines and only fits on a cleared screen.
+- The beat 6 profile takes about 15s and the trap question about 3s. Start talking while they run.
 
 ## 0:00 to 0:10 Pitch (beat 1)
 
@@ -67,10 +69,10 @@ Expected output: `_No verified claims in the knowledge base answer this question
 ## 2:05 to 2:20 What it costs (beat 8)
 
 ```sh
-.venv/bin/python scripts/chsql.py --db hive --format PrettyCompact -q "SELECT model, role, count() AS runs, round(quantile(0.5)(latency_ms)) AS p50_ms, round(quantile(0.95)(latency_ms)) AS p95_ms, round(sum(cost_usd), 5) AS cost_usd FROM hive.agent_runs GROUP BY model, role WITH TOTALS ORDER BY model, role"
+scripts/stage_queries.sh --one
 ```
 
-> "That's [N from the totals row] agent runs, aggregated live in [query time]. A full heartbeat logged: `TODO(89): paste the real full-tick heartbeat line`. All on open-weight models on AkashML."
+> "That's [N, from the 'agent runs scanned' line] agent runs, aggregated live in [server elapsed] milliseconds. A full heartbeat logged: `TODO(89): paste the real full-tick heartbeat line`. All on open-weight models on AkashML."
 
 ## 2:20 to 2:40 Semgrep and hardening (beat 9)
 

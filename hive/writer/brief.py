@@ -76,7 +76,10 @@ def citations_for(kept: list[tuple[str, list[int]]], passages: list[Passage]) ->
 def sources_md(citations: list[Citation]) -> list[str]:
     if not citations:
         return []
-    return ["", "## Sources", ""] + [f"{c.n}. {c.source_url or c.node_id or 'verified claim'}" for c in citations]
+    by_ref: dict[str, list[int]] = {}
+    for c in citations:
+        by_ref.setdefault(c.source_url or c.node_id or "verified claim", []).append(c.n)
+    return ["", "## Sources", ""] + [f"- {''.join(f'[{n}]' for n in ns)} {ref}" for ref, ns in by_ref.items()]
 
 
 def matches_entity(p: Passage, entity: str) -> bool:

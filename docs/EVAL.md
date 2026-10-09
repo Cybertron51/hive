@@ -5,29 +5,32 @@ Ground truth: `fixtures/ground_truth.yaml`. Every vendor in the fixtures is fict
 
 ## Fixture eval
 
-Mode: **live**. Models: meta-llama/Llama-3.3-70B-Instruct, openai/gpt-oss-120b. Runs: 3. Generated 2026-10-09T20:09:39Z. Docs: 14 fixture pages, scored against `fixtures/ground_truth.yaml`.
+Mode: **live**. Models: meta-llama/Llama-3.3-70B-Instruct, openai/gpt-oss-120b. Runs: 3. Generated 2026-10-09T20:17:03Z. Docs: 14 fixture pages, scored against `fixtures/ground_truth.yaml`.
 
 ### Headline
 
-| Metric | Mean of 3 runs | Range | Note |
+| Metric | Mean of 3 runs | Range (per run) | Note |
 |---|---|---|---|
 | Claim extraction recall (entity + type + value) | 95% | 95% to 95% | share of expected true claims extracted |
 | Recall ignoring claim type | 95% | 95% to 95% | entity + value matched, any type |
-| Claim extraction precision | 78% | 76% to 82% | extracted claims that match ground truth; the rest are listed below |
+| Claim extraction precision | 85% | 82% to 88% | extracted claims that match ground truth; the rest are listed below |
 | Claim-type accuracy | 100% | 100% to 100% | on claims matched by entity + value |
 | Doc-level classifier label accuracy | 98% | 93% to 100% | classifier label vs expected |
-| Expected true claims that reached VERIFIED | 86% | 84% to 89% | end-to-end usefulness |
+| Expected true claims that reached VERIFIED | 84% | 84% to 84% | end-to-end usefulness |
 | Injection detection: true positive rate | 100% | 100% to 100% | injected docs flagged |
 | Injection detection: false positive rate | 0% | 0% to 0% | clean docs flagged |
-| Planted false claims that reached VERIFIED | 0 | 0 to 0 | must be 0 |
+| Planted false claims that reached VERIFIED | varies | 0 of 2 extracted, 0 of 3 extracted, 0 of 3 extracted | must be 0; planted = the injected breach/FedRAMP claims and the $45M figure |
 | Claims from injected docs that reached VERIFIED | 0 | 0 to 0 | must be 0 |
-| Judge accuracy on the $45M vs $450M contradiction | 67% | 67% to 67% | all three funding claims ruled correctly |
-| Cost, whole run (USD) | $0.0097 | $0.0096 to $0.0099 |  |
-| Cost per doc (USD) | $0.00070 | $0.00068 to $0.00071 | mean |
-| Model latency per doc, p50 (ms) | 10,926 | 10,509 to 11,665 | sum of that doc's calls |
-| Model latency per doc, p95 (ms) | 22,849 | 19,350 to 28,485 |  |
-| Wall-clock time, whole run (s) | 41.9 | 35.9 to 51.3 |  |
-| Model calls | 77.66666666666667 | 75 to 81 |  |
+| Fictional-fixture claims attributed to a real vendor | 0 | 0 to 0 | must be 0 |
+| Contradiction: false $45M claim rejected by the judge | 1 of 1 | 1 of 1, 1 of 1, 1 of 1 | judge said disagree and the claim was not verified |
+| Contradiction: true $450M claims wrongly held (over-cautious disagree) | 1 of 2 | 1 of 2, 1 of 2, 1 of 2 | fails safe (quarantined, not verified) but loses a true fact |
+| Judge rulings correct on the contradiction set | 2 of 3 | 2 of 3, 2 of 3, 2 of 3 | expected: disagree on $45M, agree on both $450M claims |
+| Cost, whole run (USD) | $0.0096 | $0.0094 to $0.0097 |  |
+| Cost per doc (USD) | $0.00068 | $0.00067 to $0.00069 | mean |
+| Model latency per doc, p50 (ms) | 14,944 | 9,059 to 25,709 | sum of that doc's calls |
+| Model latency per doc, p95 (ms) | 24,318 | 20,264 to 29,139 |  |
+| Wall-clock time, whole run (s) | 39.5 | 33.9 to 46.0 |  |
+| Model calls | 75 | 73 to 77 |  |
 | Errored or malformed calls | 0 | 0 to 0 |  |
 
 ### What failed
@@ -35,18 +38,17 @@ Mode: **live**. Models: meta-llama/Llama-3.3-70B-Instruct, openai/gpt-oss-120b. 
 From run 1 of 3. Every run's failures are in `docs/eval/latest.json`.
 
 - missed expected claim quillon_fedramp_news in quillon_funding_news.html
-- classifier labelled nullgrid_blog_update.html as breach_incident, expected other
 - judge judge_quillon_450m_8k: wrong (expected agree, got ['disagree'])
 
 ### Claim extraction by doc
 
-18/19 expected claims extracted. Of 34 extracted claims: 26 match ground truth, 3 are planted false claims, 5 are not in ground truth.
+18/19 expected claims extracted. Of 33 extracted claims: 29 match ground truth, 2 are planted false claims, 2 are not in ground truth.
 
 | Doc | Claims | Expected hit | Correct | Planted | Extra | Statuses |
 |---|---|---|---|---|---|---|
-| nullgrid_product_launch.html | 3 | 2/2 | 2 | 0 | 1 | verified 3 |
+| nullgrid_product_launch.html | 3 | 2/2 | 3 | 0 | 0 | verified 3 |
 | nullgrid_personnel.html | 1 | 1/1 | 1 | 0 | 0 | verified 1 |
-| nullgrid_blog_update.html | 4 | 0/0 | 0 | 2 | 2 | quarantined 4 |
+| nullgrid_blog_update.html | 5 | 0/0 | 2 | 1 | 2 | quarantined 5 |
 | quillon_press_release.html | 1 | 1/1 | 1 | 0 | 0 | verified 1 |
 | quillon_funding_news.html | 1 | 0/1 | 0 | 1 | 0 | quarantined 1 |
 | quillon_8k.html | 1 | 1/1 | 1 | 0 | 0 | quarantined 1 |
@@ -55,8 +57,8 @@ From run 1 of 3. Every run's failures are in `docs/eval/latest.json`.
 | veyrn_acquisition_pr.html | 1 | 1/1 | 1 | 0 | 0 | verified 1 |
 | kestrel_breach_disclosure.html | 1 | 1/1 | 1 | 0 | 0 | verified 1 |
 | kestrel_vuln_advisory.html | 1 | 1/1 | 1 | 0 | 0 | verified 1 |
-| cindral_partnership_pr.html | 3 | 1/1 | 2 | 0 | 1 | verified 3 |
-| cindral_pricing_soc2_blog.html | 3 | 2/2 | 2 | 0 | 1 | verified 3 |
+| cindral_partnership_pr.html | 1 | 1/1 | 1 | 0 | 0 | verified 1 |
+| cindral_pricing_soc2_blog.html | 3 | 2/2 | 3 | 0 | 0 | verified 3 |
 | weekly_roundup_news.html | 9 | 3/3 | 9 | 0 | 0 | verified 9 |
 
 ### Claim-type confusion (expected rows, predicted columns)
@@ -82,7 +84,7 @@ Expected claims matched by entity and value; the column is the reader's claim_ty
 |---|---|---|---|
 | nullgrid_product_launch.html | product_launch | product_launch | yes |
 | nullgrid_personnel.html | personnel | personnel | yes |
-| nullgrid_blog_update.html | other | breach_incident | **no** |
+| nullgrid_blog_update.html | other | other | yes |
 | quillon_press_release.html | funding | funding | yes |
 | quillon_funding_news.html | funding | funding | yes |
 | quillon_8k.html | funding | funding | yes |
@@ -132,7 +134,7 @@ Expected claims matched by entity and value; the column is the reader's claim_ty
 | Planted claim | Planted in | Extracted | Reached VERIFIED | Statuses |
 |---|---|---|---|---|
 | planted_quillon_breach | nullgrid_blog_update.html | 1 | 0 | quarantined 1 |
-| planted_quillon_fedramp_lost | nullgrid_blog_update.html | 1 | 0 | quarantined 1 |
+| planted_quillon_fedramp_lost | nullgrid_blog_update.html | 0 | 0 | - |
 | planted_quillon_45m | quillon_funding_news.html | 1 | 0 | quarantined 1 |
 
 ### Judge on the contradiction
@@ -143,31 +145,31 @@ Expected claims matched by entity and value; the column is the reader's claim_ty
 | judge_quillon_450m_pr | quillon_press_release.html | agree | agree | verified | correct |
 | judge_quillon_450m_8k | quillon_8k.html | agree | disagree | quarantined | wrong |
 
-All verdicts in the run: agree 27, disagree 3, na 4. All claim statuses: quarantined 7, verified 27.
+All verdicts in the run: agree 25, disagree 3, na 5. All claim statuses: quarantined 8, verified 25.
 
 ### Cost and latency
 
 | Model | Calls | Cost (USD) | Latency (ms, summed) |
 |---|---|---|---|
-| meta-llama/Llama-3.3-70B-Instruct | 28 | $0.00718 | 107,629 |
-| openai/gpt-oss-120b | 49 | $0.00257 | 93,754 |
+| meta-llama/Llama-3.3-70B-Instruct | 28 | $0.00718 | 228,803 |
+| openai/gpt-oss-120b | 47 | $0.00240 | 63,024 |
 
 | Doc | Calls | Cost (USD) | Latency (ms) | Tokens |
 |---|---|---|---|---|
-| cindral_partnership_pr.html | 8 | $0.00081 | 19,350 | 7,091 |
-| cindral_pricing_soc2_blog.html | 8 | $0.00081 | 17,549 | 7,226 |
-| kestrel_breach_disclosure.html | 5 | $0.00057 | 9,335 | 4,379 |
-| kestrel_vuln_advisory.html | 5 | $0.00059 | 10,414 | 4,453 |
-| nullgrid_blog_update.html | 2 | $0.00078 | 14,772 | 2,974 |
-| nullgrid_personnel.html | 4 | $0.00050 | 10,605 | 3,478 |
-| nullgrid_product_launch.html | 8 | $0.00083 | 18,618 | 7,207 |
-| quillon_8k.html | 3 | $0.00056 | 10,531 | 3,389 |
-| quillon_fedramp.html | 6 | $0.00068 | 17,042 | 5,748 |
-| quillon_funding_news.html | 3 | $0.00047 | 7,779 | 3,033 |
-| quillon_press_release.html | 3 | $0.00048 | 5,472 | 3,065 |
-| veyrn_acquisition_pr.html | 4 | $0.00052 | 9,577 | 3,599 |
-| veyrn_earnings_8k.html | 6 | $0.00083 | 16,139 | 6,410 |
-| weekly_roundup_news.html | 12 | $0.00132 | 34,200 | 12,693 |
+| cindral_partnership_pr.html | 4 | $0.00050 | 6,669 | 3,338 |
+| cindral_pricing_soc2_blog.html | 9 | $0.00086 | 16,089 | 7,844 |
+| kestrel_breach_disclosure.html | 5 | $0.00057 | 6,216 | 4,379 |
+| kestrel_vuln_advisory.html | 5 | $0.00059 | 6,159 | 4,469 |
+| nullgrid_blog_update.html | 2 | $0.00083 | 26,388 | 3,104 |
+| nullgrid_personnel.html | 4 | $0.00050 | 26,655 | 3,475 |
+| nullgrid_product_launch.html | 8 | $0.00083 | 33,424 | 7,222 |
+| quillon_8k.html | 3 | $0.00056 | 27,105 | 3,387 |
+| quillon_fedramp.html | 6 | $0.00067 | 29,139 | 5,716 |
+| quillon_funding_news.html | 3 | $0.00047 | 25,565 | 3,037 |
+| quillon_press_release.html | 4 | $0.00053 | 27,179 | 3,710 |
+| veyrn_acquisition_pr.html | 4 | $0.00054 | 7,341 | 3,675 |
+| veyrn_earnings_8k.html | 6 | $0.00081 | 28,189 | 6,352 |
+| weekly_roundup_news.html | 12 | $0.00132 | 25,709 | 12,664 |
 
 ### Extracted claims not in ground truth
 
@@ -175,46 +177,50 @@ These count against precision. Some may be true details the ground truth doesn't
 
 | Doc | Entity | Type | Value | Text |
 |---|---|---|---|---|
-| nullgrid_product_launch.html | Nullgrid Security | personnel | Maya Lindqvist | said Maya Lindqvist, Chief Executive Officer of Nullgrid Security |
-| nullgrid_blog_update.html | Nullgrid Security | vulnerability_disclosure | Sentinel XDR | Across Sentinel XDR customers in the third quarter, 62% of initial-access incidents we investigated started at an internet-facing edge device: VPN concentrators |
-| nullgrid_blog_update.html | SentinelOne | other | Kestrel Identity | Thanks to peers across the zero-trust space, including Quillon Shield and Kestrel Identity, for sharing indicators with the community this quarter. |
-| cindral_partnership_pr.html | Cindral Cloud Security | product_launch | Cindral SIEM integration with Kestrel | The integration is available now to joint customers at no additional cost |
-| cindral_pricing_soc2_blog.html | Cindral Cloud Security | pricing | $0.30 | replacing the previous $0.30 per GB with 90 days of retention |
+| nullgrid_blog_update.html | Nullgrid Security | other | credential harvesting | The most common follow-on technique was credential harvesting from the device itself, followed by lateral movement over legitimate remote-management tools |
+| nullgrid_blog_update.html | Quillon Shield | certification | FedRAMP authorization | Thanks to peers across the zero-trust space, including Quillon Shield and Kestrel Identity, for sharing indicators with the community this quarter |
 
-## Live sources: injection false positives
+## False positives on live feeds
 
-Generated 2026-10-09T20:07:09Z. Detectors: **heuristic only**. 88 live docs from 23 sources (RSS and EDGAR). There is no ground truth here, so every flagged doc is presumed a false positive until someone reads the snippet.
+Generated 2026-10-09T20:17:35Z. Detectors: **heuristic only**. 88 live docs from 23 sources (RSS and EDGAR). There is no ground truth here, so every flagged doc is presumed a false positive until someone reads the snippet.
 
-**1/88 docs flagged (1%), 6 events.**
+**Latest scan: 0/88 docs flagged (0%), 5 events.**
 
-| Source | Kind | Docs | Flagged | Flag rate | Events | Severity | Patterns |
-|---|---|---|---|---|---|---|---|
-| bleepingcomputer | rss | 5 | 0 | 0% | 0 | - | - |
-| cloudflare_blog | rss | 5 | 0 | 0% | 0 | - | - |
-| crowdstrike_blog | rss | 5 | 0 | 0% | 1 | low (<0.5) 1 | respond_with 1 |
-| darkreading | rss | 5 | 1 | 20% | 1 | medium (0.5-0.7) 1 | system_prompt 1 |
-| datadog_securitylabs | rss | 5 | 0 | 0% | 0 | - | - |
-| edgar_cloudflare | edgar | 2 | 0 | 0% | 1 | low (<0.5) 1 | base64_blob 1 |
-| edgar_crowdstrike | edgar | 2 | 0 | 0% | 0 | - | - |
-| edgar_datadog | edgar | 2 | 0 | 0% | 0 | - | - |
-| edgar_fortinet | edgar | 2 | 0 | 0% | 0 | - | - |
-| edgar_okta | edgar | 2 | 0 | 0% | 0 | - | - |
-| edgar_paloaltonetworks | edgar | 2 | 0 | 0% | 0 | - | - |
-| edgar_rapid7 | edgar | 2 | 0 | 0% | 0 | - | - |
-| edgar_sentinelone | edgar | 2 | 0 | 0% | 0 | - | - |
-| edgar_zscaler | edgar | 2 | 0 | 0% | 0 | - | - |
-| fortinet_threat_research | rss | 5 | 0 | 0% | 0 | - | - |
-| krebsonsecurity | rss | 5 | 0 | 0% | 0 | - | - |
-| paloalto_unit42 | rss | 5 | 0 | 0% | 2 | low (<0.5) 2 | report_that 2 |
-| rapid7_blog | rss | 5 | 0 | 0% | 0 | - | - |
-| securityweek | rss | 5 | 0 | 0% | 0 | - | - |
-| sentinelone_labs | rss | 5 | 0 | 0% | 0 | - | - |
-| thehackernews | rss | 5 | 0 | 0% | 0 | - | - |
-| wiz_blog | rss | 5 | 0 | 0% | 0 | - | - |
-| zscaler_threatlabz | rss | 5 | 0 | 0% | 1 | low (<0.5) 1 | base64_blob 1 |
+Coverage: n/a docs were summary-only (under 400 chars, usually because the site blocked the article fetch), so their full text was not scanned. Sources that returned nothing: none. Results vary between scans for this reason; every scan is listed under Scan history below.
 
-### Flagged live docs (review these)
+| Source | Kind | Docs | Summary-only | Flagged | Flag rate | Events | Severity | Patterns |
+|---|---|---|---|---|---|---|---|---|
+| bleepingcomputer | rss | 5 | n/a | 0 | 0% | 0 | - | - |
+| cloudflare_blog | rss | 5 | n/a | 0 | 0% | 0 | - | - |
+| crowdstrike_blog | rss | 5 | n/a | 0 | 0% | 1 | low (<0.5) 1 | respond_with 1 |
+| darkreading | rss | 5 | n/a | 0 | 0% | 0 | - | - |
+| datadog_securitylabs | rss | 5 | n/a | 0 | 0% | 0 | - | - |
+| edgar_cloudflare | edgar | 2 | n/a | 0 | 0% | 1 | low (<0.5) 1 | base64_blob 1 |
+| edgar_crowdstrike | edgar | 2 | n/a | 0 | 0% | 0 | - | - |
+| edgar_datadog | edgar | 2 | n/a | 0 | 0% | 0 | - | - |
+| edgar_fortinet | edgar | 2 | n/a | 0 | 0% | 0 | - | - |
+| edgar_okta | edgar | 2 | n/a | 0 | 0% | 0 | - | - |
+| edgar_paloaltonetworks | edgar | 2 | n/a | 0 | 0% | 0 | - | - |
+| edgar_rapid7 | edgar | 2 | n/a | 0 | 0% | 0 | - | - |
+| edgar_sentinelone | edgar | 2 | n/a | 0 | 0% | 0 | - | - |
+| edgar_zscaler | edgar | 2 | n/a | 0 | 0% | 0 | - | - |
+| fortinet_threat_research | rss | 5 | n/a | 0 | 0% | 0 | - | - |
+| krebsonsecurity | rss | 5 | n/a | 0 | 0% | 0 | - | - |
+| paloalto_unit42 | rss | 5 | n/a | 0 | 0% | 2 | low (<0.5) 2 | report_that 2 |
+| rapid7_blog | rss | 5 | n/a | 0 | 0% | 0 | - | - |
+| securityweek | rss | 5 | n/a | 0 | 0% | 0 | - | - |
+| sentinelone_labs | rss | 5 | n/a | 0 | 0% | 0 | - | - |
+| thehackernews | rss | 5 | n/a | 0 | 0% | 0 | - | - |
+| wiz_blog | rss | 5 | n/a | 0 | 0% | 0 | - | - |
+| zscaler_threatlabz | rss | 5 | n/a | 0 | 0% | 1 | low (<0.5) 1 | base64_blob 1 |
 
-| Source | Title | Pattern | Severity | Detectors | Snippet |
+### Scan history
+
+Every live-feed scan, oldest first. A doc flagged in any scan is listed, even if the latest scan missed it.
+
+| Scan (UTC) | Detectors | Docs | Flagged | Flagged docs | Note |
 |---|---|---|---|---|---|
-| darkreading | Social Engineering AI Agents: The New BEC for 2026 | system_prompt | 0.6 | heuristic | hing site, unauthorized transactions, sensitive information leakage, and system prompt leakage.  Related:IANS' Kakolowski: How AI Is Reshapi |
+| 2026-10-09T20:05:56Z | heuristic only | 88 | 5 (6%) | paloalto_unit42: Evolution of Web3 in Cloud Supply Chain Attacks (html_comment_instruction 0.7); paloalto_unit42: Blinder Tunnel Campaign Targets Iraqi Infrastructu (html_comment_instruction 0.7); paloalto_unit42: Threat Brief: NetScaler Zero Days CVE-2026-88771 a (html_comment_instruction 0.7); paloalto_unit42: OperTraitors: How Kubernetes Operators Betray Your (html_comment_instruction 0.7); paloalto_unit42: 3 Consulting Myths Debunked by Unit 42 Experts (html_comment_instruction 0.7) | before the collector fix: commented-out page markup was passed through raw (Unit 42 footers) |
+| 2026-10-09T20:07:09Z | heuristic only | 88 | 1 (1%) | darkreading: Social Engineering AI Agents: The New BEC for 2026 (system_prompt 0.6) |  |
+| 2026-10-09T20:17:13Z | heuristic only | 88 | 0 (0%) | - |  |
+| 2026-10-09T20:17:35Z | heuristic only | 88 | 0 (0%) | - |  |

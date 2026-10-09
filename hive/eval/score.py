@@ -231,7 +231,7 @@ def score_fixtures(
 
     # judge on the contradiction
     judge_rows = []
-    judge_ok = 0
+    judge_ok = false_rejected = false_total = true_held = true_total = 0
     for s in gt.get("contradiction") or []:
         doc = doc_by_fixture.get(s["doc"])
         hits = [c for c in claims_by_doc.get(doc.doc_id, [])] if doc else []
@@ -245,6 +245,12 @@ def score_fixtures(
         else:
             outcome = "wrong"
         judge_ok += outcome == "correct"
+        if s["expected_verdict"] == "disagree":
+            false_total += 1
+            false_rejected += bool(hits) and all(st != ClaimStatus.VERIFIED.value for st in statuses) and "disagree" in verdicts
+        else:
+            true_total += 1
+            true_held += bool(hits) and any(v == "disagree" for v in verdicts)
         judge_rows.append({"id": s["id"], "doc": s["doc"], "expected": s["expected_verdict"], "verdicts": verdicts,
                            "statuses": statuses, "reasons": [c.judge_reason[:160] for c in hits], "outcome": outcome})
         if outcome != "correct":
@@ -289,9 +295,16 @@ def score_fixtures(
         "injection_tpr": _rate(tp, tp + fn),
         "injection_fpr": _rate(fp, fp + tn),
         "planted_leaks": leaks,
+        "planted_extracted": sum(r["extracted"] for r in planted_rows),
         "verified_from_injected_docs": len(verified_from_injected),
         "real_vendor_misattributions": len(misattributed),
         "judge_contradiction_accuracy": _rate(judge_ok, len(judge_rows)),
+        "judge_rulings_correct": judge_ok,
+        "judge_rulings_total": len(judge_rows),
+        "contradiction_false_rejected": false_rejected,
+        "contradiction_false_total": false_total,
+        "contradiction_true_held": true_held,
+        "contradiction_true_total": true_total,
         "cost_usd_total": round(sum(r.cost_usd for r in result.runs), 6),
         "cost_usd_per_doc": round(statistics.mean(costs), 6) if costs else 0.0,
         "latency_ms_per_doc_p50": _pct(lat, 0.5),
@@ -318,7 +331,10 @@ def score_fixtures(
     }
 
 
-def score_sources(docs: list[RawDocument], events: list[InjectionEvent], swarm_ran: bool) -> dict[str, Any]:
+SUMMARY_ONLY_CHARS = 400
+
+
+def score_sources(docs: list[RawDocument], events: list[InjectionEvent], swarm_ran: bool, configured: list[str] | None = None) -> dict[str, Any]:
     by_doc: dict[str, list[InjectionEvent]] = defaultdict(list)
     for e in events:
         by_doc[e.doc_id].append(e)
@@ -340,14 +356,17 @@ def score_sources(docs: list[RawDocument], events: list[InjectionEvent], swarm_r
         n_flag = sum(1 for d in sdocs if d.doc_id in flagged)
         rows.append({
             "source_id": src, "kind": sdocs[0].kind, "docs": len(sdocs), "flagged": n_flag,
+            "summary_only": sum(1 for d in sdocs if len(d.text) < SUMMARY_ONLY_CHARS),
             "flag_rate": _rate(n_flag, len(sdocs)), "events": sum(patterns.values()),
             "severity": dict(sev), "patterns": dict(patterns.most_common()), "samples": samples[:5],
         })
     total = len(docs)
     n_flag = sum(1 for d in docs if d.doc_id in flagged)
+    missing = sorted(set(configured or []) - {r["source_id"] for r in rows})
     return {
         "headline": {"docs": total, "sources": len(rows), "flagged_docs": n_flag, "flag_rate": _rate(n_flag, total),
-                     "events": len(events), "detectors": "heuristic + canary" if swarm_ran else "heuristic only"},
+                     "events": len(events), "detectors": "heuristic + canary" if swarm_ran else "heuristic only",
+                     "summary_only_docs": sum(r["summary_only"] for r in rows), "missing_sources": missing},
         "by_source": rows,
         "patterns": dict(Counter(e.pattern for e in events).most_common()),
     }

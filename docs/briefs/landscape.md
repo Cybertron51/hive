@@ -1,6 +1,6 @@
 # Competitive landscape
 
-_Approved claims in Senso as of 2026-10-09 20:09 UTC. Every cell is copied from a verified claim; no model wrote this table._
+_Approved claims in Senso as of 2026-10-09 20:17 UTC. Every cell is copied from a verified claim; no model wrote this table._
 
 | Competitor | Latest verified move | Risk flags | Mean confidence | Verified claims |
 |---|---|---|---|---|

@@ -4,6 +4,7 @@
   .venv/bin/python scripts/eval.py --dry-run               # FakeLLM, free; writes docs/eval/dry_run.json + docs/eval/EVAL_dry_run.md
   .venv/bin/python scripts/eval.py --live [--repeat 3]     # real models over fixtures; writes docs/eval/latest.json + docs/EVAL.md
   .venv/bin/python scripts/eval.py --sources [--live]      # live feeds: injection events by source (heuristic; --live adds the canary)
+  .venv/bin/python scripts/eval.py --render                # rebuild docs/EVAL.md from docs/eval/*.json
 
 Never writes to ClickHouse or Senso (telemetry=False, ingest=False). A --live run exits 1 if a planted claim
 or a claim from an injected doc reaches VERIFIED.
@@ -13,6 +14,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import sys
 import time
 from datetime import datetime, timezone
@@ -55,6 +57,19 @@ def _archive(data: dict, mode: str) -> None:
     _write_json(OUT_DIR / "runs" / f"{stamp}_{mode}.json", data)
 
 
+def _history() -> list[dict]:
+    out = []
+    for f in sorted((OUT_DIR / "runs").glob("*_sources-*.json")):
+        d = _read_json(f)
+        if d and "result" in d:
+            out.append(d)
+    return out
+
+
+def _render() -> str:
+    return report.render(_read_json(OUT_DIR / "latest.json"), _read_json(OUT_DIR / "sources_latest.json"), _history())
+
+
 def _require_live() -> None:
     if not settings.akashml_api_key:
         sys.exit("--live needs AKASHML_API_KEY in .env (use --dry-run for a free structural check)")
@@ -80,7 +95,7 @@ async def eval_fixtures(mode: str, repeat: int, concurrency: int) -> dict:
         h = scored["headline"]
         print(f"run {i + 1}/{repeat}: recall {h['extraction_recall']}, precision {h['extraction_precision']}, "
               f"injection TPR {h['injection_tpr']} FPR {h['injection_fpr']}, planted leaks {h['planted_leaks']}, "
-              f"judge {h['judge_contradiction_accuracy']}, ${h['cost_usd_total']:.4f}, {wall:.1f}s")
+              f"judge {h['judge_rulings_correct']}/{h['judge_rulings_total']} (true held {h['contradiction_true_held']}), ${h['cost_usd_total']:.4f}, {wall:.1f}s")
     return {"mode": mode, "generated_at": _now(), "models": sorted(models), "docs": len(docs), "runs": runs}
 
 
@@ -93,7 +108,8 @@ async def eval_sources(live: bool, concurrency: int) -> dict:
     else:
         events = [e for d in docs for e in detect(d)]
         cost = 0.0
-    data = score.score_sources(docs, events, swarm_ran=live)
+    configured = [s["source_id"] for s in load_sources(SOURCES) if s["kind"] in ("rss", "edgar")]
+    data = score.score_sources(docs, events, swarm_ran=live, configured=configured)
     data["headline"]["cost_usd"] = cost
     return {"mode": "sources-live" if live else "sources-heuristic", "generated_at": _now(), "result": data}
 
@@ -102,7 +118,7 @@ def _print_fixture_summary(fx: dict) -> None:
     first = fx["runs"][0]
     print()
     for key, label, fmt, _ in report.HEADLINE:
-        print(f"  {label:<55} {fmt(first['headline'][key]) if first['headline'][key] is not None else 'n/a'}")
+        print(f"  {label:<72} {report.show_metric(fmt, first['headline'], key)}")
     print(f"\n  failures ({len(first['failures'])}):")
     for f in first["failures"]:
         print(f"   - {f}")
@@ -116,7 +132,16 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--sources", action="store_true", help="scan live feeds for injection false positives instead of the fixtures")
     ap.add_argument("--repeat", type=int, default=1, help="fixture runs to average (live models vary run to run)")
     ap.add_argument("--concurrency", type=int, default=8)
+    ap.add_argument("--no-cache", action="store_true", help="bypass the collector article cache (sets HIVE_NO_CACHE=1)")
+    ap.add_argument("--render", action="store_true", help="rebuild docs/EVAL.md from the saved JSON results, no model calls")
     args = ap.parse_args(argv)
+    if args.no_cache:
+        os.environ["HIVE_NO_CACHE"] = "1"
+
+    if args.render:
+        EVAL_MD.write_text(_render(), encoding="utf-8")
+        print(f"wrote {EVAL_MD.relative_to(ROOT)}")
+        return 0
 
     if args.sources:
         if args.dry_run:
@@ -126,7 +151,7 @@ def main(argv: list[str] | None = None) -> int:
         src = asyncio.run(eval_sources(args.live, args.concurrency))
         _write_json(OUT_DIR / "sources_latest.json", src)
         _archive(src, src["mode"])
-        EVAL_MD.write_text(report.render(_read_json(OUT_DIR / "latest.json"), src), encoding="utf-8")
+        EVAL_MD.write_text(_render(), encoding="utf-8")
         h = src["result"]["headline"]
         print(f"{h['flagged_docs']}/{h['docs']} live docs flagged ({h['detectors']}), {h['events']} events, ${h['cost_usd']:.4f}")
         for r in src["result"]["by_source"]:
@@ -150,7 +175,7 @@ def main(argv: list[str] | None = None) -> int:
         fx = asyncio.run(eval_fixtures("live", args.repeat, args.concurrency))
         _write_json(OUT_DIR / "latest.json", fx)
         _archive(fx, "live")
-        EVAL_MD.write_text(report.render(fx, _read_json(OUT_DIR / "sources_latest.json")), encoding="utf-8")
+        EVAL_MD.write_text(_render(), encoding="utf-8")
         written = "docs/EVAL.md and docs/eval/latest.json"
 
     _print_fixture_summary(fx)

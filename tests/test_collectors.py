@@ -24,6 +24,12 @@ FICTIONAL_NAMES = {"Nullgrid Security", "Quillon Shield", "Veyrn Defense", "Kest
 network = pytest.mark.skipif(not os.environ.get("HIVE_NETWORK_TESTS"), reason="set HIVE_NETWORK_TESTS=1 for live feeds")
 
 
+@pytest.fixture(autouse=True)
+def _isolated_cache(tmp_path, monkeypatch):
+    monkeypatch.setenv("HIVE_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.delenv("HIVE_NO_CACHE", raising=False)
+
+
 @pytest.fixture(scope="module")
 def fixture_docs():
     return asyncio.run(collect_all(SOURCES, kinds={"fixture"}))
@@ -295,3 +301,39 @@ def test_collect_all_populates_entities(fixture_docs):
     assert set(by_source["nullgrid_blog"].entities) >= {"Nullgrid Security", "Quillon Shield", "Kestrel Identity"}
     assert all(d.entities for d in fixture_docs)
     assert not any(set(d.entities) & LIVE_NAMES for d in fixture_docs)
+
+
+def test_cache_roundtrip_ttl_and_failures(tmp_path, monkeypatch):
+    import time
+
+    from hive.collectors import cache
+
+    cache.put("https://a.example/x", title="T", text="body")
+    assert cache.get("https://a.example/x", 60)["text"] == "body"
+    assert cache.get("https://a.example/y", 60) is None
+    cache.put("https://a.example/f", failed=True, status=429)
+    assert cache.get("https://a.example/f", None)["failed"]
+    monkeypatch.setattr(time, "time", lambda: 10**12)
+    assert cache.get("https://a.example/x", 60) is None
+    assert cache.get("https://a.example/x", None)["text"] == "body"
+    assert cache.get("https://a.example/f", None) is None
+    monkeypatch.setenv("HIVE_NO_CACHE", "1")
+    assert cache.get("https://a.example/x", None) is None
+
+
+async def test_rss_articles_are_cached_between_ticks(internal_server, monkeypatch):
+    from hive.collectors import _common, rss
+
+    base, hits = internal_server
+    original = _common.validate_url
+
+    async def allow_local(url):
+        return url
+
+    monkeypatch.setattr(_common, "validate_url", allow_local)
+    src = {"source_id": "local_feed", "url": f"{base}/feed.xml"}
+    first = await rss.collect(src)
+    second = await rss.collect(src)
+    assert first[0].text == second[0].text and "INTERNAL SECRET" in first[0].text
+    assert hits.count("/feed.xml") == 2 and hits.count("/internal") == 1
+    monkeypatch.setattr(_common, "validate_url", original)

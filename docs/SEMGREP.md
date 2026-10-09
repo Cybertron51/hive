@@ -7,7 +7,7 @@ Semgrep Guardian ran as a Claude Code hook in every build session, scanning each
 | D (senso, writer, docs) | none | `hive/senso/client.py`, `hive/writer/brief.py` | Guardian scanned both files on write and reported no findings | n/a |
 | Collectors | none | `hive/collectors/*.py` | Guardian scanned every collector file on write and reported no findings. Manual hardening: SSRF, XXE, path traversal, unbounded responses (see `tests/test_collectors.py`) | `safe_get` in `_common.py`: http/https only, rejects non-public IPs, re-checks each redirect hop, 2 MB body cap; `resolve_fixture` confines paths to `fixtures/`; feeds containing `<!ENTITY` are rejected; lxml parses with `no_network=True` |
 | D found it, Collectors fixed it | CWE-918 SSRF (manual review, PoC confirmed) | `hive/collectors/rss.py` `_fetch_article`, `hive/collectors/page.py` `collect` (original versions) | Article links from untrusted feeds were fetched with no scheme or host check and with redirects followed. A feed item could make Hive read localhost services (ClickHouse :8123, cloud metadata) into the pipeline. See Finding 1 | `safe_get` in `_common.py` (Collectors row) |
-| D found it, fix routed to ClickHouse session | CWE-306 / CWE-352 missing auth on the event store (manual review) | `clickhouse/docker-compose.yml` (`CLICKHOUSE_PASSWORD: ""`, ports `8123`/`9000` on all interfaces), `dashboard/index.html` (`CH` URL) | The monitoring plane's own database accepts unauthenticated queries from the LAN, and from any web page the operator opens. See Finding 2 | Bind to 127.0.0.1, give the writer user a password, add a read-only `dashboard` user |
+| D found it, ClickHouse session fixed it | CWE-306 / CWE-352 missing auth on the event store (manual review) | `clickhouse/docker-compose.yml` (`CLICKHOUSE_PASSWORD: ""`, ports `8123`/`9000` on all interfaces), `dashboard/index.html` (`CH` URL) | The monitoring plane's own database accepts unauthenticated queries from the LAN, and from any web page the operator opens. See Finding 2 | Moved the event store to ClickHouse Cloud (TLS, password); the dashboard reads via a localhost read-only proxy; the local fallback container is loopback-only with a password |
 
 ## Finding 1: SSRF through RSS article links
 
@@ -67,11 +67,13 @@ GET requests run with `readonly=2`, but ClickHouse runs POST bodies with the use
 - Anyone on the same network (venue wifi) can `DROP` or `ALTER` tables, delete `injection_events` to hide an attack, or raise a malicious source's `source_trust` so its claims stop being quarantined.
 - A web page open in the operator's browser can send a `fetch('http://localhost:8123/', {method: 'POST', mode: 'no-cors', body: 'INSERT ...'})`. It's a simple request with no CORS preflight, so the write runs even though the page can't read the response. This is CSRF against the monitoring plane.
 
-**Fix** (owned by the ClickHouse session):
+**Fix** (by the ClickHouse session, verified on their side):
 
-1. Publish the ports on loopback only: `127.0.0.1:8123:8123` and `127.0.0.1:9000:9000`.
-2. Give the writer user a password, set through `CLICKHOUSE_URL=http://hive:<pw>@localhost:8123` (`hive/telemetry.py` already reads credentials from the URL).
-3. Add a `dashboard` user with `readonly=1` and only `SELECT ON hive.*`. The dashboard sends `user` and `password` parameters, and a leaked read-only credential can't write.
+1. Live data now lives in ClickHouse Cloud over TLS, with a password. Ports 8123 and 9000 no longer carry it.
+2. The dashboard reads through a local proxy bound to `127.0.0.1`. The proxy forces `readonly=1`, accepts only a single `SELECT`, and keeps the credentials out of the browser. That closes the CSRF path: a hostile web page can't send writes, because the proxy refuses anything but a single read.
+3. The local fallback container was recreated. Both ports are bound to `127.0.0.1`, a password is required, an unauthenticated query was confirmed rejected, and its data was preserved.
+
+**Remaining risk.** There's no separate read-only Cloud user yet, because it needs a password written to `.env`. The proxy's forced `readonly=1` covers the dashboard path in the meantime.
 
 ## Hardening applied in session D without a finding
 

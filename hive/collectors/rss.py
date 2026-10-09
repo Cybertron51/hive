@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 import feedparser
 import httpx
 
+from hive.collectors import cache
 from hive.collectors._common import UnsafeURLError, ResponseTooLargeError, decode, make_client, safe_get
 from hive.collectors.extract import html_to_text
 from hive.models import RawDocument
@@ -32,11 +33,19 @@ def parse_feed(body: bytes):
 
 
 async def _fetch_article(client: httpx.AsyncClient, url: str) -> tuple[str, str]:
+    hit = cache.get(url, cache.ARTICLE_TTL_S)
+    if hit is not None:
+        return ("", "") if hit.get("failed") else (hit.get("title", ""), hit.get("text", ""))
     try:
         _, body, ctype = await safe_get(client, url)
-        return html_to_text(decode(body, ctype))
+    except httpx.HTTPStatusError as e:
+        cache.put(url, failed=True, status=e.response.status_code)
+        return "", ""
     except (httpx.HTTPError, UnsafeURLError, ResponseTooLargeError):
         return "", ""
+    title, text = html_to_text(decode(body, ctype))
+    cache.put(url, title=title, text=text)
+    return title, text
 
 
 async def collect(source: dict) -> list[RawDocument]:

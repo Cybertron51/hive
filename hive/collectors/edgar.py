@@ -13,6 +13,7 @@ import time
 import httpx
 from lxml import etree
 
+from hive.collectors import cache
 from hive.collectors._common import USER_AGENT, ResponseTooLargeError, UnsafeURLError, decode, make_client, parse_dt, safe_get
 from hive.collectors.extract import html_to_text
 from hive.models import RawDocument
@@ -56,25 +57,39 @@ def _archive_url(cik, adsh: str, filename: str) -> str:
 
 
 async def _doc_text(client: httpx.AsyncClient, url: str) -> str:
+    """Archived filings are immutable, so successful extractions are cached without expiry."""
+    hit = cache.get(url, None)
+    if hit is not None:
+        return "" if hit.get("failed") else hit.get("text", "")
     try:
         _, body, ctype = await _sec_get(client, url, max_bytes=DOC_MAX_BYTES, truncate=True)
+    except httpx.HTTPStatusError as e:
+        cache.put(url, failed=True, status=e.response.status_code)
+        return ""
     except (httpx.HTTPError, UnsafeURLError, ResponseTooLargeError):
         return ""
     try:
-        return html_to_text(decode(body, ctype))[1]
+        text = html_to_text(decode(body, ctype))[1]
     except (ValueError, etree.LxmlError):
         return ""
+    cache.put(url, text=text)
+    return text
 
 
 async def _exhibit_99_texts(client: httpx.AsyncClient, cik, adsh: str, limit: int = 2) -> list[str]:
     index_url = _archive_url(cik, adsh, "index.json")
     if not index_url:
         return []
-    try:
-        _, body, _ = await _sec_get(client, index_url)
-        items = json.loads(body).get("directory", {}).get("item", [])
-    except (httpx.HTTPError, UnsafeURLError, ResponseTooLargeError, ValueError):
-        return []
+    hit = cache.get(index_url, None)
+    if hit is not None and not hit.get("failed"):
+        items = hit.get("items", [])
+    else:
+        try:
+            _, body, _ = await _sec_get(client, index_url)
+            items = json.loads(body).get("directory", {}).get("item", [])
+        except (httpx.HTTPError, UnsafeURLError, ResponseTooLargeError, ValueError):
+            return []
+        cache.put(index_url, items=[{"name": i.get("name", "")} for i in items if isinstance(i, dict)])
     names = [i.get("name", "") for i in items if _EX99.search(i.get("name", "")) and i.get("name", "").lower().endswith((".htm", ".html"))]
     texts = []
     for name in sorted(names)[:limit]:

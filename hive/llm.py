@@ -53,7 +53,7 @@ def _extract_json(raw: str) -> dict[str, Any] | None:
 
 
 async def chat_json(
-    model: str, system: str, user: str, schema_hint: str, temperature: float = 0.0, max_tokens: int = 1200
+    model: str, system: str, user: str, schema_hint: str, temperature: float = 0.0, max_tokens: int = 2000
 ) -> LLMResult:
     started = time.perf_counter()
     resp = await client().chat.completions.create(

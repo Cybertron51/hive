@@ -341,5 +341,6 @@
       "base64_blob": 2,
       "respond_with": 1
     }
-  }
+  },
+  "note": "before the collector fix: commented-out page markup was passed through raw (Unit 42 footers)"
 }
