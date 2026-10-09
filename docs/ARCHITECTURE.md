@@ -1,6 +1,6 @@
-# Hive: competitive intelligence swarm
+# Hive architecture
 
-A swarm of open-weight agents turns public security news into verified competitor intelligence. ClickHouse watches the swarm itself for bad judgments and prompt injection.
+Hive is a swarm of cheap open-weight agents that reads untrusted web pages all day, and ClickHouse watches the swarm itself so a poisoned blog post can't ship a fake breach into a brief. The use case is competitive intelligence on security vendors.
 
 ![Hive dashboard](screenshots/dashboard.png)
 
@@ -34,6 +34,16 @@ Constants from `hive/swarm/policy.py`; the dashboard legend is generated from th
 | `source_trust` | source trust |
 | `heartbeats` | heartbeat header and history |
 | `seen_docs` | none, only skips repeats |
+
+## Models and cost
+
+| Role | Model on AkashML | Price per M tokens (input/output) |
+|---|---|---|
+| Reader, classifier | Llama 3.3 70B Instruct | $0.20 / $0.52 |
+| Judge, grounding judge, reroute | gpt-oss-120b | $0.037 / $0.187 |
+| Writer | Qwen 3.8 27B | $0.225 / $1.98 |
+
+A full heartbeat over 96 docs made 745 calls for $0.13 in 9.7 minutes. See [EVAL.md](EVAL.md) for accuracy.
 
 ## Storage and access
 

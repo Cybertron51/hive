@@ -39,8 +39,13 @@ SYSTEM = {
         + ", ".join(LABELS) + ", a one-sentence text that names the actor, action and date if stated, the key "
         "value (dollar amount, product name, CVE id, certification name, executive name, or date) and your "
         "confidence 0..1. Use breach_incident when the company itself was compromised and "
-        "vulnerability_disclosure when a flaw in its product was disclosed. Only extract what the document "
-        "states. " + _GUARD
+        "vulnerability_disclosure when a flaw in its product was disclosed. For breach_incident and "
+        "vulnerability_disclosure, entity is the organization breached or whose product is vulnerable, never "
+        "the researcher reporting it; if that party is not a tracked competitor, still name it as entity. A "
+        "vendor publishing research about others is at most a product or other claim about the vendor, usually "
+        "not a claim at all. For earnings, value must name the metric and period, e.g. 'Q2 FY27 revenue $1.47B' "
+        "or 'FY27 revenue guidance $860-870M'; drop figures whose metric cannot be determined. Same for "
+        "funding: name the round. Only extract what the document states. " + _GUARD
     ),
     "classifier": (
         "ROLE: classifier. Assign the document one label from " + ", ".join(LABELS) + ", a relevance score "

@@ -5,7 +5,7 @@ Hive is a swarm of cheap open-weight agents that reads untrusted web pages all d
 ## Before recording
 
 ```sh
-scripts/ch_up.sh
+scripts/ch_up.sh                      # only for the local fallback; skip when .env points at ClickHouse Cloud
 scripts/demo_up.sh                    # dashboard on :8080 + preflight. No --reset: it would truncate the full-tick history
 kill "$(cat logs/heartbeat.pid)"      # stop the background heartbeat so it can't collide with the live tick
 rm -f data/seen.json                  # so the live beat collects documents instead of showing new=0
