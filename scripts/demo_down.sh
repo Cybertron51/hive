@@ -22,6 +22,6 @@ stop() {
   rm -f "$pidfile"
 }
 
-stop heartbeat logs/heartbeat.pid 'python.* -m hive\.heartbeat'
-stop dashboard logs/dashboard.pid 'python.* -m http\.server 8080'
-stop proxy logs/proxy.pid 'python.* scripts/dashboard_proxy\.py'
+stop heartbeat logs/heartbeat.pid '^[^ ]*[Pp]ython[^ ]* -m hive\.heartbeat'
+stop dashboard logs/dashboard.pid '^[^ ]*[Pp]ython[^ ]* -m http\.server 8080'
+stop proxy logs/proxy.pid '^[^ ]*[Pp]ython[^ ]* scripts/dashboard_proxy\.py'

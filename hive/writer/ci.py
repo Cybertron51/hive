@@ -14,8 +14,8 @@ from typing import Any
 from hive.config import settings
 from hive.llm import chat_json
 from hive.models import AgentRun, Role, RunStatus
-from hive.senso.client import Passage, SensoError, get_kb
-from hive.writer.brief import Brief, brief_path, cited_sentences, citations_for, file_gap, sources_md
+from hive.senso.client import Passage, SensoError, get_kb, parse_meta
+from hive.writer.brief import Brief, Citation, brief_path, cited_sentences, citations_for, file_gap, sources_md
 from hive.writer.vocab import CLAIM_TYPES, PROFILE_GUIDANCE, PROFILE_SECTIONS, label
 
 OUT_DIR = Path("docs/briefs")
@@ -150,6 +150,77 @@ async def digest(since_ts: datetime | str, entities: list[str] | None = None, mo
     )
 
 
+MOVE_TYPES = ("acquisition", "funding", "product_launch", "partnership", "earnings", "pricing", "personnel", "certification")
+RISK_TYPES = ("breach_incident", "vulnerability_disclosure")
+
+
+def _cell(text: str, limit: int = 140) -> str:
+    t = " ".join(text.split()).replace("|", "/")
+    return t if len(t) <= limit else t[: limit - 1].rstrip() + "…"
+
+
+def _claim_sentence(p: Passage) -> str:
+    return p.text.strip().split("\n", 1)[0]
+
+
+async def landscape(entities: list[str] | None = None, swarm_id: str = "") -> Brief:
+    """One cross-competitor table built directly from approved Senso passages: no model writes any cell."""
+    from hive.writer.questions import entities as tracked
+
+    names = entities or tracked()
+    run = AgentRun(swarm_id=swarm_id, role=Role.WRITER, model="none", label="landscape")
+    kb = get_kb()
+    try:
+        groups = await asyncio.gather(*(
+            kb.context(f"{e} latest {' '.join(label(t) for t in MOVE_TYPES + RISK_TYPES)}") for e in names
+        ))
+    except SensoError as e:
+        run.status, run.error = RunStatus.ERROR, str(e)[:500]
+        return Brief(entity="landscape", question="landscape", markdown="# Competitive landscape\n\nKnowledge base unavailable.\n", run=run)
+
+    sources: list[str] = []
+
+    def cite(p: Passage) -> str:
+        ref = p.source_url or p.node_id
+        if ref not in sources:
+            sources.append(ref)
+        return f"[{sources.index(ref) + 1}]"
+
+    rows = []
+    for name, passages in zip(names, groups):
+        mine = _dedupe([[p for p in passages if _matches(p, name)]])
+        if not mine:
+            rows.append(f"| {name} | _no verified claims_ | | | 0 |")
+            continue
+        moves = sorted((p for p in mine if p.claim_type in MOVE_TYPES), key=lambda p: p.decided or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+        move = f"{_cell(_claim_sentence(moves[0]))} {cite(moves[0])}" if moves else "_none verified_"
+        risks = [p for p in mine if p.claim_type in RISK_TYPES]
+        by_type: dict[str, list[str]] = {}
+        for r in risks:
+            refs = by_type.setdefault(r.claim_type, [])
+            if (c := cite(r)) not in refs:
+                refs.append(c)
+        flags = ", ".join(f"{label(t).lower()} {''.join(refs)}" for t, refs in by_type.items()) or "none verified"
+        confs = [float(parse_meta(p.text).get("Confidence") or 0) for p in mine]
+        rows.append(f"| {name} | {move} | {flags} | {sum(confs) / len(confs):.2f} | {len(mine)} |")
+
+    lines = [
+        "# Competitive landscape", "",
+        f"_Approved claims in Senso as of {datetime.now(timezone.utc):%Y-%m-%d %H:%M} UTC. Every cell is copied from a verified claim; no model wrote this table._", "",
+        "| Competitor | Latest verified move | Risk flags | Mean confidence | Verified claims |",
+        "|---|---|---|---|---|",
+        *rows,
+    ]
+    if sources:
+        lines += ["", "## Sources", ""] + [f"{i}. {s}" for i, s in enumerate(sources, 1)]
+    markdown = "\n".join(lines) + "\n"
+    run.confidence = 1.0
+    run.output = {"entities": len(names), "with_claims": sum("_no verified claims_" not in r for r in rows), "sources": len(sources)}
+    citations = [Citation(n=i, text="", source_url=src if src.startswith("http") else "", node_id="" if src.startswith("http") else src)
+                 for i, src in enumerate(sources, 1)]
+    return Brief(entity="landscape", question="landscape", markdown=markdown, citations=citations, run=run)
+
+
 def save(brief: Brief, name: str, out_dir: Path = OUT_DIR) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     path = brief_path(out_dir, name)
@@ -186,12 +257,16 @@ if __name__ == "__main__":
     dp = sub.add_parser("digest")
     dp.add_argument("--since", required=True, help="ISO timestamp, UTC if no offset")
     dp.add_argument("--entities", default="", help="comma-separated; default all")
+    sub.add_parser("landscape")
     ap.add_argument("--model", default=None)
     args = ap.parse_args()
 
     if args.cmd == "profile":
         brief = asyncio.run(competitor_profile(args.entity, args.model))
         path = save(brief, f"profile-{args.entity}")
+    elif args.cmd == "landscape":
+        brief = asyncio.run(landscape())
+        path = save(brief, "landscape")
     else:
         ents = [e.strip() for e in args.entities.split(",") if e.strip()] or None
         brief = asyncio.run(digest(args.since, ents, args.model))

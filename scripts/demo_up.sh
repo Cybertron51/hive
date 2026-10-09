@@ -16,7 +16,7 @@ done
 
 mkdir -p logs
 source scripts/_ch_mode.sh
-HB_PATTERN='python.* -m hive\.heartbeat'
+HB_PATTERN='^[^ ]*[Pp]ython[^ ]* -m hive\.heartbeat'
 URL=http://localhost:8080/
 
 alive() { [ -f "$1" ] && kill -0 "$(cat "$1")" 2>/dev/null; }
@@ -35,7 +35,7 @@ fi
 
 if [ "$IS_CLOUD" = 1 ]; then
   echo "== dashboard proxy (ClickHouse Cloud)"
-  if pgrep -fi 'python.* scripts/dashboard_proxy\.py' >/dev/null; then
+  if [ "$(curl -s -m 2 -o /dev/null -w '%{http_code}' -X OPTIONS http://localhost:8765/query 2>/dev/null)" = 204 ]; then
     echo "already running"
   else
     nohup "$PY" scripts/dashboard_proxy.py >>logs/proxy.log 2>&1 </dev/null &

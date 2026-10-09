@@ -25,6 +25,15 @@ writer ─> competitor profiles + heartbeat digest (every line cited)
 - **Writer** (`hive/writer`) builds competitor profiles (Positioning, Recent moves, Risks, People) and a heartbeat digest grouped by claim type, using only Senso passages. Any sentence without a valid citation is dropped.
 - **Dashboard** (`dashboard/`) is a static page that polls ClickHouse as a read-only user.
 
+## Senso integration
+
+Senso is where Hive's verified context lives and where its unanswered questions go.
+
+- **Verified context.** Judged claims are written into the `shared-context` folder and tagged `status:approved` or `status:draft`, plus `owner:hive-judge`, `decided:<date>`, `entity:<name>` and `claim_type:<type>`. Senso search has no tag or folder filter, so each claim's text also ends with metadata lines. Retrieval keeps only passages whose own `Status:` line says approved. Untrusted fields are flattened to one line before ingest, so a scraped page can't forge that line.
+- **Writer outputs.** Competitor profiles, the heartbeat digest and `docs/briefs/landscape.md` are built only from approved passages. The landscape table is copied cell by cell from claims, with no model writing it.
+- **Open questions.** Every heartbeat asks five standing analyst questions per competitor: pricing, breaches, FedRAMP and certification, funding and financials, and key hires. The writer also asks any question it's given. Answered questions become cited digest lines. Unanswered ones go to Senso's gap report, filed as weak on the first sighting and open on the second, for a human to answer.
+- **Caveat.** Senso files a gap only when its own retrieval returns nothing, and its API has no direct create-gap call. Its hybrid search sometimes matches another company's passages, for example Quillon Shield's FedRAMP claim for "What is Okta's FedRAMP status?". Senso then treats the question as answered even though Hive has no approved answer for that company. On our first run, 45 of 71 open questions reached the gap report. Hive's own ledger (`data/open_questions.json`, shown by `python -m hive.writer.questions`) is the complete list.
+
 ## Sponsor tools
 
 | Tool | What it does in Hive |
@@ -54,6 +63,8 @@ Profile or digest from verified claims:
 ```sh
 .venv/bin/python -m hive.writer.ci profile "CrowdStrike"
 .venv/bin/python -m hive.writer.ci digest --since 2026-10-09T18:00
+.venv/bin/python -m hive.writer.ci landscape
+.venv/bin/python -m hive.writer.questions          # open analyst questions, local ledger and Senso gap report
 ```
 
 To stop: `scripts/demo_down.sh`. For the 3-minute demo, see [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md).

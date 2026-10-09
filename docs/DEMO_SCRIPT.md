@@ -51,7 +51,7 @@ Dashboard: quarantine queue, the Quillon Shield funding row.
 
 > "The writer reads only approved claims in Senso's shared-context folder, which the judge tagged status:approved. The profile has Positioning, Recent moves, Risks and People. Every line cites its passage, and the code drops any sentence without a valid citation. Under Risks there's no breach, because the only breach claim came from the injected page. The digest shows what changed since the last heartbeat, grouped by claim type."
 
-## 2:10 to 2:25 The trap question (beat 7)
+## 2:10 to 2:30 The trap question (beat 7)
 
 ```sh
 .venv/bin/python -m hive.writer.brief "CrowdStrike" "What is CrowdStrike's internal sales quota for next quarter?"
@@ -59,9 +59,15 @@ Dashboard: quarantine queue, the Quillon Shield funding row.
 
 Expected output: `_No verified claims in the knowledge base answer this question._`
 
-> "Ask about something that isn't in the verified KB and the writer refuses instead of guessing. It doesn't fill gaps with outside knowledge."
+Then show that it landed in Senso:
 
-## 2:25 to 2:45 Cost and live query (beat 8)
+```sh
+senso gaps list --origin api_unanswered_question --status weak --status open | head
+```
+
+> "Ask about something that isn't in the verified KB and the writer refuses instead of guessing. It doesn't fill gaps with outside knowledge. The question doesn't disappear either: it lands in Senso's gap report as an open question for a human. Every heartbeat also asks five standing analyst questions per competitor, and the unanswered ones queue up here."
+
+## 2:30 to 2:45 Cost and live query (beat 8)
 
 ```sh
 scripts/stage_queries.sh --pause
