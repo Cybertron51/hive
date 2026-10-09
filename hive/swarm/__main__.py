@@ -113,7 +113,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--sources", default="config/sources.yaml")
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--kinds", default="", help="comma-separated collector kinds, e.g. fixture,rss")
-    ap.add_argument("--concurrency", type=int, default=8)
+    ap.add_argument("--concurrency", type=int, default=16)
     ap.add_argument("--dry-run", action="store_true", help="use FakeLLM, sample docs, no Senso ingest")
     ap.add_argument("--log", action="store_true", help="write telemetry even in --dry-run")
     ap.add_argument("--brief", action="store_true", help="write cited competitor profiles and a heartbeat digest to docs/briefs/")
@@ -143,10 +143,24 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
+SENSO_CREDIT_FLOOR = 10.0
+
+
 async def write_briefs(result: SwarmResult, since: datetime | None = None, log: bool = True) -> None:
     from hive.writer.ci import digest, landscape, save, write_profiles_for
     from hive.writer.questions import ask_all, digest_lines
 
+    from hive.senso.client import SensoError, get_kb
+
+    try:
+        credits = await get_kb().credits_available()
+    except SensoError as exc:
+        print(f"briefs skipped: cannot read Senso credit balance ({exc})", file=sys.stderr)
+        return
+    if credits < SENSO_CREDIT_FLOOR:
+        print(f"briefs skipped: Senso credits_available={credits:.2f} is under the floor of {SENSO_CREDIT_FLOOR}; "
+              "no profiles, digest, landscape or questions this tick", file=sys.stderr)
+        return
     since = since or min((c.created_at for c in result.claims), default=datetime.now(timezone.utc))
     briefs = [(f"profile-{b.entity}", b) for b in await write_profiles_for(result)]
     d = await digest(since, swarm_id=result.swarm_id)

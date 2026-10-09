@@ -50,7 +50,12 @@ SYSTEM = {
     "judge": (
         "ROLE: judge. Decide whether the evidence documents agree with, contradict, or say nothing about "
         "the claim. Use verdict=agree only when evidence supports it, disagree when evidence contradicts it, "
-        "na otherwise. " + _GUARD
+        "na otherwise. Each document carries a SOURCE CLASS: primary (company filing, 8-K, newsroom, press "
+        "release, investor relations) or secondary (news, blogs, aggregators). A primary source outweighs a "
+        "secondary one. If the CLAIM SOURCE is primary and only secondary evidence contradicts it, return "
+        "verdict=agree and note the secondary conflict in reason. If two independent primary sources conflict, "
+        "return disagree. List the numbers of the evidence documents that contradict the claim in contradicting "
+        "(empty when none do). " + _GUARD
     ),
     "judge_grounding": (
         "ROLE: judge (grounding). Decide whether the source document itself explicitly states the claim. "
@@ -75,7 +80,10 @@ SCHEMA = {
         '{"label": "' + "|".join(LABELS) + '", "relevance": float, "confidence": float, '
         '"injection_suspected": bool, "injection_quote": str}'
     ),
-    "judge": '{"verdict": "agree|disagree|na", "reason": str, "confidence": float, "injection_suspected": bool, "injection_quote": str}',
+    "judge": (
+        '{"verdict": "agree|disagree|na", "reason": str, "confidence": float, "contradicting": [int], '
+        '"injection_suspected": bool, "injection_quote": str}'
+    ),
     "judge_grounding": '{"verdict": "agree|disagree|na", "reason": str, "confidence": float, "injection_suspected": bool, "injection_quote": str}',
     "injection": '{"injection_suspected": bool, "injection_quote": str, "confidence": float}',
 }
@@ -102,10 +110,12 @@ def classifier_user(title: str, url: str, text: str, claims: list[dict]) -> str:
     return f"CLAIMS EXTRACTED:\n{json.dumps(claims)[:2000]}\n\n" + document_block(title, url, text)
 
 
-def judge_user(claim: dict, evidence: list[tuple[str, str, str]]) -> str:
+def judge_user(claim: dict, evidence: list[tuple[str, str, str, str]], claim_class: str = "") -> str:
     parts = [f"CLAIM:\n{json.dumps(claim)}"]
-    for i, (title, url, text) in enumerate(evidence, 1):
-        parts.append(f"EVIDENCE {i}:\n" + document_block(title, url, text, MAX_EVIDENCE_CHARS))
+    if claim_class:
+        parts.append(f"CLAIM SOURCE CLASS: {claim_class}")
+    for i, (title, url, text, source_class) in enumerate(evidence, 1):
+        parts.append(f"EVIDENCE {i} (SOURCE CLASS: {source_class}):\n" + document_block(title, url, text, MAX_EVIDENCE_CHARS))
     return "\n\n".join(parts)
 
 

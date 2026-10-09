@@ -6,11 +6,13 @@ Hive is a swarm of cheap open-weight agents that reads untrusted web pages all d
 
 ```sh
 scripts/ch_up.sh
-scripts/demo_up.sh --reset       # dashboard on :8080, preflight, heartbeat --interval 90 --brief in the background
-rm -f data/seen.json             # so the live beat collects documents instead of showing new=0
+scripts/demo_up.sh                    # dashboard on :8080 + preflight. No --reset: it would truncate the full-tick history
+kill "$(cat logs/heartbeat.pid)"      # stop the background heartbeat so it can't collide with the live tick
+rm -f data/seen.json                  # so the live beat collects documents instead of showing new=0
 ```
 
-- Let one background heartbeat finish so the dashboard isn't empty.
+- The dashboard history comes from full ticks run earlier (a full tick of 96 docs took 582s with the grounding judge). Don't run a full tick on stage.
+- Rehearse the bounded tick once: it takes about a minute. It runs without `--brief` to save Senso credits; beat 6 runs the profile itself. Start the beat 2 narration as soon as you press Enter.
 - Open http://localhost:8080/ in a browser.
 - In a second tab, open `fixtures/nullgrid_blog_update.html` rendered normally, and in a third, `view-source:` of the same file.
 - Keep one terminal at the repo root and have `config/competitors.yaml` open in an editor.
@@ -23,15 +25,15 @@ Show `config/competitors.yaml`.
 
 > "Hive is a swarm of cheap open-weight agents that reads untrusted web pages all day, and ClickHouse watches the swarm itself so a poisoned blog post can't ship a fake breach into a brief. Here it's doing competitive intelligence on these security vendors."
 
-## 0:10 to 0:40 A live heartbeat (beats 2 and 3)
+## 0:10 to 0:40 A live heartbeat (beats 2 and 3, the tick keeps running into beat 4)
 
 ```sh
-.venv/bin/python -m hive.heartbeat --once --brief --reset-seen
+.venv/bin/python -m hive.heartbeat --once --reset-seen --kinds fixture,rss --limit 40
 ```
 
 On the dashboard, the timeline fills with runs per model and role and their latency, and the verified-claims feed updates with real items about CrowdStrike, Palo Alto Networks and others.
 
-> "Every reader, classifier and judge call lands in ClickHouse within a second. The attack is staged; the live feeds are real and run through the same path."
+> "This is a bounded tick for the demo; the full feed set runs on the schedule. Every reader, classifier and judge call lands in ClickHouse within a second. The attack is staged; the live feeds are real and run through the same path."
 
 ## 0:40 to 1:05 The catch (beat 4)
 
@@ -72,7 +74,9 @@ Expected output: `_No verified claims in the knowledge base answer this question
 scripts/stage_queries.sh --one
 ```
 
-> "That's [N, from the 'agent runs scanned' line] agent runs, aggregated live in [server elapsed] milliseconds. A full heartbeat logged: `TODO(89): paste the real full-tick heartbeat line`. All on open-weight models on AkashML."
+> "That's [N, from the 'agent runs scanned' line] agent runs, aggregated live in [server elapsed] milliseconds. A full heartbeat over 96 documents made 745 model calls and cost thirteen cents, all on open-weight models on AkashML."
+
+For reference, the log line behind that sentence is `[13:11:55] heartbeat new=96/96 runs=745 verified=285 quarantined=25 injections=10 cost=$0.1328 dur=582.3s status=ok`.
 
 ## 2:20 to 2:40 Semgrep and hardening (beat 9)
 

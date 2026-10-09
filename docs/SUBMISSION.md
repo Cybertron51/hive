@@ -43,7 +43,7 @@ While building, a human review found an SSRF in our own collector. We fixed it, 
 - The contradiction: a news site says Quillon Shield raised $45M while the press release and 8-K say $450M. The wrong number doesn't ship; in one run the judge was over-cautious and held the 8-K too. We'd rather miss than lie.
 - A competitor profile generated from Senso's approved claims, with every line cited and no breach under Risks.
 - The trap question: the writer refuses, and the question lands in Senso's gap report as an open question.
-- One live ClickHouse query: latency p50/p95 and cost by model and role. A full heartbeat logged: TODO(89): paste the real full-tick heartbeat line.
+- One live ClickHouse query: latency p50/p95 and cost by model and role. A full heartbeat over 96 documents made 745 model calls in 582 s for $0.1328, all on open-weight models.
 - Semgrep, framed honestly: Guardian scanned every edit and passed; a human review found the SSRF, and the regression tests are rule-shaped so it can't come back. We also found that an unauthenticated ClickHouse could blind the monitoring plane; it's now on ClickHouse Cloud with TLS and a proxy.
 
 ## Team

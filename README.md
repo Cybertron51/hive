@@ -51,7 +51,7 @@ Senso is where Hive's verified context lives and where its unanswered questions 
 uv venv --python 3.12 && uv pip install -e .
 cp .env.example .env            # fill AKASHML_*, SENSO_API_KEY, CLICKHOUSE_PASSWORD
 scripts/ch_up.sh                # ClickHouse on 127.0.0.1, schema applied
-scripts/demo_up.sh              # dashboard on http://localhost:8080/, preflight, heartbeat every 90s with briefs
+scripts/demo_up.sh              # dashboard on http://localhost:8080/, preflight, heartbeat every 300s (add --brief for briefs, --interval N to change)
 ```
 
 One heartbeat in the foreground:

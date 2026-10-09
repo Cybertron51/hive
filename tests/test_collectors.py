@@ -337,3 +337,27 @@ async def test_rss_articles_are_cached_between_ticks(internal_server, monkeypatc
     assert first[0].text == second[0].text and "INTERNAL SECRET" in first[0].text
     assert hits.count("/feed.xml") == 2 and hits.count("/internal") == 1
     monkeypatch.setattr(_common, "validate_url", original)
+
+
+async def test_fixtures_lead_deterministically_so_limit_keeps_the_demo_docs(monkeypatch):
+    from hive.collectors import rss
+
+    async def fake_rss(source):
+        return [RawDocument(source_id=source["source_id"], url=f"{source['url']}#{i}", text="live item", kind="rss") for i in range(3)]
+
+    monkeypatch.setattr(rss, "collect", fake_rss)
+    import hive.collectors as hc
+
+    monkeypatch.setitem(hc.COLLECTORS, "rss", fake_rss)
+    docs = await collect_all(SOURCES, kinds={"fixture", "rss"})
+    head = docs[:14]
+    assert all(d.kind == "fixture" for d in head)
+    assert {d.source_id for d in head} == FIXTURE_SOURCE_IDS
+    fixture_sources = [s for s in load_sources(SOURCES) if s["kind"] == "fixture"]
+    expected_urls = [s["url"] for s in sorted(fixture_sources, key=lambda s: (s["source_id"], s["path"]))]
+    assert [d.url for d in head] == expected_urls
+    rss_ids = [s["source_id"] for s in load_sources(SOURCES) if s["kind"] == "rss"]
+    seen = list(dict.fromkeys(d.source_id for d in docs[14:]))
+    assert seen == rss_ids
+    assert any(d.url.endswith("/blog/q3-edge-telemetry") for d in docs[:40])
+    assert {"quillon_newsroom", "cyber_ledger", "edgar_mirror"} <= {d.source_id for d in docs[:40]}

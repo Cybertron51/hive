@@ -14,6 +14,13 @@ STRONG_CUE = re.compile(
     r"|\byou\s+are\s+an?\s+(?:ai|assistant|(?:large\s+)?(?:language\s+)?model)\b",
     re.I,
 )
+SYSTEM_PROMPT_CUE = re.compile(
+    r"\b(?:ignore|disregard)\b(?:\W+\w+){0,4}?\W+(?:instructions?|rules|guidelines)\b"
+    r"|\b(?:previous|prior)\s+instructions\b"
+    r"|\byou\s+are\s+an?\s+(?:ai|assistant|(?:large\s+)?(?:language\s+)?model)\b"
+    r"|\byou(?:r|rs|rself)?\b",
+    re.I,
+)
 COMMENT_CUE = re.compile(
     r"\b(?:ignore|disregard|respond|override|must)\b|\b(?:previous|prior)\s+instructions\b|\bsystem\s+prompt\b"
     r"|\byou\s+are\s+an?\s+(?:ai|assistant|model)\b|\breport\s+that\b|\bdo\s+not\s+tell\b",
@@ -36,12 +43,12 @@ _TAG_END = re.compile(r"[\"']?\s*>")
 SIMPLE: list[tuple[str, re.Pattern[str], float]] = [
     ("ignore_instructions", re.compile(r"ignore\s+(?:all|previous|prior)(?:\s+\w+)?\s+instructions", re.I), 0.9),
     ("role_reassignment", re.compile(r"you\s+are\s+an?\s+(?:ai|assistant|language\s+model)", re.I), 0.7),
-    ("system_prompt", re.compile(r"system\s+prompt", re.I), 0.6),
     ("do_not_tell", re.compile(r"do\s+not\s+tell", re.I), 0.6),
 ]
-CUED: list[tuple[str, re.Pattern[str]]] = [
-    ("report_that", re.compile(r"report\s+that", re.I)),
-    ("respond_with", re.compile(r"respond\s+with", re.I)),
+CUED: list[tuple[str, re.Pattern[str], re.Pattern[str]]] = [
+    ("report_that", re.compile(r"report\s+that", re.I), STRONG_CUE),
+    ("respond_with", re.compile(r"respond\s+with", re.I), STRONG_CUE),
+    ("system_prompt", re.compile(r"system\s+prompt", re.I), SYSTEM_PROMPT_CUE),
 ]
 CUED_LOW, CUED_HIGH = 0.25, 0.6
 COMMENT_SEVERITY = 0.7
@@ -70,9 +77,9 @@ def _hits(text: str) -> list[tuple[str, int, int, float]]:
     hits: list[tuple[str, int, int, float]] = []
     for name, rx, severity in SIMPLE:
         hits.extend((name, m.start(), m.end(), severity) for m in rx.finditer(text))
-    for name, rx in CUED:
+    for name, rx, cue in CUED:
         for m in rx.finditer(text):
-            cued = STRONG_CUE.search(_window(text, m.start(), m.end()))
+            cued = cue.search(_window(text, m.start(), m.end()))
             hits.append((name, m.start(), m.end(), CUED_HIGH if cued else CUED_LOW))
     for m in _COMMENT.finditer(text):
         body = m.group(1)

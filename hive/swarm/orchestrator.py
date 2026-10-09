@@ -16,6 +16,7 @@ from hive.swarm.pricing import large_model, small_model
 log = logging.getLogger(__name__)
 
 MAX_EVIDENCE = 3
+FLUSH_INTERVAL_S = 10.0
 
 
 @dataclass
@@ -27,6 +28,8 @@ class SwarmResult:
     trust: dict[str, float] = field(default_factory=dict)
     brief_inputs: list[dict[str, Any]] = field(default_factory=list)
     sink_errors: list[str] = field(default_factory=list)
+    sink: Any = field(default=None, repr=False, compare=False)
+    logged: set[str] = field(default_factory=set, repr=False, compare=False)
 
 
 @dataclass
@@ -41,6 +44,33 @@ class _DocState:
     @property
     def injected(self) -> bool:
         return policy.doc_injected(self.heuristic, self.canary)
+
+
+def _stream(result: SwarmResult, runs: list[AgentRun] = (), events: list[InjectionEvent] = ()) -> None:
+    sink = result.sink
+    if sink is None:
+        return
+    for fn, items, key in ((sink.log_run, runs, "run_id"), (sink.log_injection, events, "event_id")):
+        for item in items:
+            ident = getattr(item, key)
+            if ident in result.logged:
+                continue
+            result.logged.add(ident)
+            try:
+                fn(item)
+            except Exception as exc:
+                msg = f"{fn.__name__}: {type(exc).__name__}: {exc}"
+                result.sink_errors.append(msg[:300])
+                log.warning("sink failed: %s", msg)
+
+
+async def _flusher(result: SwarmResult, interval: float) -> None:
+    flush = getattr(result.sink, "flush", None)
+    if not callable(flush):
+        return
+    while True:
+        await asyncio.sleep(interval)
+        await _emit(lambda _: flush(), None, result)
 
 
 def _canary_event(run: AgentRun, doc: RawDocument, output: dict) -> InjectionEvent:
@@ -64,10 +94,14 @@ async def _confirm_canary(state: _DocState, tripped: list[tuple[AgentRun, dict]]
         result.runs.append(run)
         confirmed = run.canary_tripped or run.status in (RunStatus.ERROR, RunStatus.MALFORMED)
         if run.canary_tripped:
-            result.injection_events.append(_canary_event(run, state.doc, out))
+            event = _canary_event(run, state.doc, out)
+            result.injection_events.append(event)
+            _stream(result, events=[event])
     if confirmed:
         state.canary = True
-        result.injection_events.extend(_canary_event(r, state.doc, out) for r, out in tripped)
+        events = [_canary_event(r, state.doc, out) for r, out in tripped]
+        result.injection_events.extend(events)
+        _stream(result, events=events)
         return
     for r, _ in tripped:
         r.status, r.injection_flag = RunStatus.OK, False
@@ -76,6 +110,7 @@ async def _confirm_canary(state: _DocState, tripped: list[tuple[AgentRun, dict]]
 async def _process_doc(doc: RawDocument, swarm_id: str, sem: asyncio.Semaphore, result: SwarmResult) -> _DocState:
     state = _DocState(doc=doc, heuristic=detect(doc, swarm_id))
     result.injection_events.extend(state.heuristic)
+    _stream(result, events=state.heuristic)
     async with sem:
         reader_run, reader_out = await agents.run_reader(doc, swarm_id, small_model())
         result.runs.append(reader_run)
@@ -91,6 +126,8 @@ async def _process_doc(doc: RawDocument, swarm_id: str, sem: asyncio.Semaphore, 
         for run in (reader_run, cls_run):
             if run.status == RunStatus.OK:
                 run.injection_flag = True
+    await _reroute(state, swarm_id, sem, result)
+    _stream(result, runs=[r for r in result.runs if r.doc_id == doc.doc_id])
     return state
 
 
@@ -138,8 +175,13 @@ async def _judge_claim(
             async with sem:
                 run, out = await agents.run_judge(payload, evidence, swarm_id, large_model(), state.doc)
             result.runs.append(run)
+            _stream(result, runs=[run])
             if run.status == RunStatus.OK:
                 verdict, reason = JudgeVerdict(out["verdict"]), policy.REASON_CORROBORATED + out["reason"]
+                picked = out.get("contradicting") or range(1, len(evidence) + 1)
+                verdict, reason = policy.primary_override(
+                    verdict, reason, policy.source_class(state.doc), [policy.source_class(evidence[i - 1]) for i in picked],
+                )
                 fallback = "evidence silent"
             else:
                 fallback = f"judge {run.status.value}"
@@ -162,6 +204,7 @@ async def _ground_claim(
     async with sem:
         run, out = await agents.run_grounding(payload, state.doc, swarm_id, large_model())
     result.runs.append(run)
+    _stream(result, runs=[run])
     if run.status != RunStatus.OK:
         status = policy.decide(confidence, state.injected, JudgeVerdict.NA)
         return JudgeVerdict.NA, f"{fallback}; grounding {run.status.value}: {run.error}"[:300], status
@@ -234,15 +277,20 @@ async def _ingest_verified(result: SwarmResult, urls: dict[str, str]) -> None:
             claim.senso_node_id = _node_id(await _emit(ingest, claim, result))
 
 
-async def _log_telemetry(result: SwarmResult) -> None:
+def _load_sink() -> Any:
     try:
         from hive import telemetry
-    except ImportError:
+    except ImportError as exc:
+        log.warning("telemetry unavailable: %s", exc)
+        return None
+    return telemetry
+
+
+async def _log_telemetry(result: SwarmResult) -> None:
+    telemetry = result.sink
+    if telemetry is None:
         return
-    for run in result.runs:
-        await _emit(telemetry.log_run, run, result)
-    for event in result.injection_events:
-        await _emit(telemetry.log_injection, event, result)
+    _stream(result, runs=result.runs, events=result.injection_events)
     for claim in result.claims:
         await _emit(telemetry.log_claim, claim, result)
     for src, score in result.trust.items():
@@ -267,14 +315,26 @@ def _brief_inputs(result: SwarmResult, docs: dict[str, RawDocument], tracked: di
 async def run_swarm(
     docs: list[RawDocument],
     swarm_id: str | None = None,
-    concurrency: int = 8,
+    concurrency: int = 16,
     telemetry: bool = True,
     ingest: bool = True,
 ) -> SwarmResult:
-    result = SwarmResult(swarm_id=swarm_id or new_id())
+    result = SwarmResult(swarm_id=swarm_id or new_id(), sink=_load_sink() if telemetry else None)
+    flusher = asyncio.create_task(_flusher(result, FLUSH_INTERVAL_S)) if result.sink is not None else None
+    try:
+        return await _run(docs, result, concurrency, ingest)
+    finally:
+        if flusher is not None:
+            flusher.cancel()
+            try:
+                await flusher
+            except asyncio.CancelledError:
+                pass
+
+
+async def _run(docs: list[RawDocument], result: SwarmResult, concurrency: int, ingest: bool) -> SwarmResult:
     sem = asyncio.Semaphore(max(1, concurrency))
     states = list(await asyncio.gather(*(_process_doc(d, result.swarm_id, sem, result) for d in docs)))
-    await asyncio.gather(*(_reroute(s, result.swarm_id, sem, result) for s in states))
     pairs = [(s, c) for s in states for c in s.claims]
     pre_trust = _injection_trust(states, result)
     result.claims = list(await asyncio.gather(
@@ -286,6 +346,5 @@ async def run_swarm(
     if ingest:
         await _ingest_verified(result, {k: d.url for k, d in by_id.items()})
     result.brief_inputs = _brief_inputs(result, by_id, tracked)
-    if telemetry:
-        await _log_telemetry(result)
+    await _log_telemetry(result)
     return result

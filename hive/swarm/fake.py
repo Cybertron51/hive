@@ -79,12 +79,13 @@ def _classifier(text: str) -> dict:
 
 
 def _judge(user: str) -> dict:
-    evidence = " ".join(_DOC.findall(user)).lower()
-    if any(cue in evidence for cue in CONTRADICTION_CUES):
+    docs = [d.lower() for d in _DOC.findall(user)]
+    contradicting = [i for i, d in enumerate(docs, 1) if any(cue in d for cue in CONTRADICTION_CUES)]
+    if contradicting:
         return {"verdict": "disagree", "reason": "evidence contradicts the claim", "confidence": 0.85,
-                "injection_suspected": False, "injection_quote": ""}
+                "contradicting": contradicting, "injection_suspected": False, "injection_quote": ""}
     return {"verdict": "agree", "reason": "evidence is consistent with the claim", "confidence": 0.85,
-            "injection_suspected": False, "injection_quote": ""}
+            "contradicting": [], "injection_suspected": False, "injection_quote": ""}
 
 
 _CLAIM = re.compile(r"CLAIM:\n(\{.*?\})\n", re.S)

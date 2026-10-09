@@ -139,6 +139,7 @@ class KnowledgeBase(Protocol):
     async def context(self, query: str, max_results: int = 20, approved_only: bool = True) -> list[Passage]: ...
     async def record_gap(self, question: str, entity: str = "", context: str = "", content_ids: list[str] | None = None) -> dict[str, Any]: ...
     async def gaps(self, statuses: tuple[str, ...] = ("weak", "open", "reopened"), search: str = "") -> list[dict[str, Any]]: ...
+    async def credits_available(self) -> float: ...
 
 
 class SensoKB:
@@ -288,6 +289,11 @@ class SensoKB:
         return data.get("gaps") or []
 
 
+    async def credits_available(self) -> float:
+        data = self._json(await self._request("GET", "/org/credits/balance"), "credits")
+        return float(data.get("credits_available") or 0.0)
+
+
 class LocalKB:
     """Offline stand-in for Senso, backed by a JSON file. Ranking is plain token overlap."""
 
@@ -329,6 +335,9 @@ class LocalKB:
 
     async def wait_processed(self, node_id: str, timeout: float = 60) -> bool:
         return True
+
+    async def credits_available(self) -> float:
+        return float("inf")
 
     @staticmethod
     def _tokens(s: str) -> set[str]:

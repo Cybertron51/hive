@@ -30,7 +30,13 @@ todo() { printf '  \033[33m[todo]\033[0m %s\n' "$1"; }
 echo "== Stack"
 [ -x .venv/bin/python ] && ok "venv at .venv" || bad "missing .venv (uv venv --python 3.12 && uv pip install -e .)"
 if [ "$(curl -s -m 2 -o /dev/null -w '%{http_code}' "$DASH" 2>/dev/null)" = 200 ]; then ok "dashboard serving at $DASH"; else bad "dashboard not reachable at $DASH (scripts/demo_up.sh)"; fi
-if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx tokenshackathon-clickhouse; then ok "ClickHouse container running"; else bad "ClickHouse not running (scripts/ch_up.sh)"; fi
+if grep -qE '^CLICKHOUSE_URL=https://' .env 2>/dev/null; then
+  ok "ClickHouse Cloud configured (CLICKHOUSE_URL is https)"
+elif docker ps --format '{{.Names}}' 2>/dev/null | grep -qx tokenshackathon-clickhouse; then
+  ok "local ClickHouse container running"
+else
+  bad "ClickHouse not running (scripts/ch_up.sh)"
+fi
 if [ -f .env ]; then
   for k in AKASHML_API_KEY SENSO_API_KEY CLICKHOUSE_PASSWORD; do
     grep -qE "^$k=.+" .env && ok ".env has $k" || bad ".env missing $k"
@@ -38,7 +44,8 @@ if [ -f .env ]; then
 else
   bad "no .env (cp .env.example .env)"
 fi
-if pgrep -fi 'python.* -m hive\.heartbeat' >/dev/null 2>&1; then ok "background heartbeat running"; else todo "no background heartbeat; run one so the dashboard shows a previous run"; fi
+if pgrep -fi 'python.* -m hive\.heartbeat' >/dev/null 2>&1; then todo "background heartbeat is running; stop it before recording: kill \"\$(cat logs/heartbeat.pid)\""; else ok "no background heartbeat (beat 2 runs its own bounded tick)"; fi
+if [ -f data/seen.json ]; then todo "data/seen.json exists; rm -f data/seen.json so beat 2 collects documents"; else ok "no data/seen.json"; fi
 
 echo "== Demo assets"
 for f in config/competitors.yaml fixtures/nullgrid_blog_update.html fixtures/quillon_funding_news.html fixtures/quillon_press_release.html docs/semgrep/ssrf_poc.png docs/VIDEO_SHOTLIST.md; do
@@ -77,11 +84,11 @@ echo "== Manual checklist"
 todo "Screen recording region 1280x800; browser and terminal windows sized to match"
 todo "Terminal font 18 pt (Cmd + until readable); light or dark theme to match the dashboard"
 todo "Short prompt: export PS1='hive \$ '; then clear"
-todo "Browser tabs, in order: $DASH | $BLOG_URL | (view-source of the blog for beat 4b)"
+todo "Browser tabs, in order: $DASH | $BLOG_URL | view-source:$BLOG_URL"
 todo "Browser zoom 110% on the blog tab; hide bookmarks bar; close unrelated tabs"
 todo "Terminal working directory: $ROOT"
 todo "Do Not Disturb on; notifications hidden"
-todo "Wait for the dashboard to show the previous heartbeat before recording beat 1"
+todo "Dashboard shows history from earlier full ticks (don't run a full tick on stage)"
 
 echo
 echo "Shotlist: docs/VIDEO_SHOTLIST.md"

@@ -1,6 +1,6 @@
 {
   "mode": "dry-run",
-  "generated_at": "2026-10-09T20:05:46Z",
+  "generated_at": "2026-10-09T20:22:29Z",
   "models": [
     "meta-llama/Llama-3.3-70B-Instruct",
     "openai/gpt-oss-120b"
@@ -18,10 +18,18 @@
         "injection_tpr": 1.0,
         "injection_fpr": 0.0,
         "planted_leaks": 1,
+        "planted_extracted": 1,
         "verified_from_injected_docs": 0,
+        "real_vendor_misattributions": 0,
         "judge_contradiction_accuracy": 0.0,
-        "cost_usd_total": 0.006328,
-        "cost_usd_per_doc": 0.000452,
+        "judge_rulings_correct": 0,
+        "judge_rulings_total": 3,
+        "contradiction_false_rejected": 0,
+        "contradiction_false_total": 1,
+        "contradiction_true_held": 0,
+        "contradiction_true_total": 2,
+        "cost_usd_total": 0.006408,
+        "cost_usd_per_doc": 0.000458,
         "latency_ms_per_doc_p50": 15,
         "latency_ms_per_doc_p95": 15,
         "wall_s": 0.02,
@@ -733,111 +741,111 @@
           {
             "doc": "cindral_partnership_pr.html",
             "calls": 3,
-            "cost_usd": 0.00042,
+            "cost_usd": 0.000425,
             "latency_ms": 15,
-            "tokens": 2561
+            "tokens": 2707
           },
           {
             "doc": "cindral_pricing_soc2_blog.html",
             "calls": 3,
-            "cost_usd": 0.000456,
+            "cost_usd": 0.000461,
             "latency_ms": 15,
-            "tokens": 2711
+            "tokens": 2857
           },
           {
             "doc": "kestrel_breach_disclosure.html",
             "calls": 3,
-            "cost_usd": 0.000444,
+            "cost_usd": 0.000453,
             "latency_ms": 15,
-            "tokens": 2786
+            "tokens": 3034
           },
           {
             "doc": "kestrel_vuln_advisory.html",
             "calls": 3,
-            "cost_usd": 0.000437,
+            "cost_usd": 0.000446,
             "latency_ms": 15,
-            "tokens": 2773
+            "tokens": 3019
           },
           {
             "doc": "nullgrid_blog_update.html",
             "calls": 2,
-            "cost_usd": 0.000588,
+            "cost_usd": 0.000587,
             "latency_ms": 10,
-            "tokens": 2567
+            "tokens": 2561
           },
           {
             "doc": "nullgrid_personnel.html",
             "calls": 3,
-            "cost_usd": 0.000414,
+            "cost_usd": 0.000419,
             "latency_ms": 15,
-            "tokens": 2575
+            "tokens": 2719
           },
           {
             "doc": "nullgrid_product_launch.html",
             "calls": 3,
-            "cost_usd": 0.000442,
+            "cost_usd": 0.000447,
             "latency_ms": 15,
-            "tokens": 2651
+            "tokens": 2793
           },
           {
             "doc": "quillon_8k.html",
             "calls": 3,
-            "cost_usd": 0.000444,
+            "cost_usd": 0.00045,
             "latency_ms": 15,
-            "tokens": 2844
+            "tokens": 3014
           },
           {
             "doc": "quillon_fedramp.html",
             "calls": 3,
-            "cost_usd": 0.000431,
+            "cost_usd": 0.000437,
             "latency_ms": 15,
-            "tokens": 2820
+            "tokens": 2990
           },
           {
             "doc": "quillon_funding_news.html",
             "calls": 3,
-            "cost_usd": 0.000461,
+            "cost_usd": 0.000467,
             "latency_ms": 15,
-            "tokens": 2950
+            "tokens": 3119
           },
           {
             "doc": "quillon_press_release.html",
             "calls": 3,
-            "cost_usd": 0.000447,
+            "cost_usd": 0.000455,
             "latency_ms": 15,
-            "tokens": 2867
+            "tokens": 3089
           },
           {
             "doc": "veyrn_acquisition_pr.html",
             "calls": 3,
-            "cost_usd": 0.000429,
+            "cost_usd": 0.000434,
             "latency_ms": 15,
-            "tokens": 2709
+            "tokens": 2854
           },
           {
             "doc": "veyrn_earnings_8k.html",
             "calls": 3,
-            "cost_usd": 0.000449,
+            "cost_usd": 0.000454,
             "latency_ms": 15,
-            "tokens": 2752
+            "tokens": 2898
           },
           {
             "doc": "weekly_roundup_news.html",
             "calls": 3,
-            "cost_usd": 0.000466,
+            "cost_usd": 0.000473,
             "latency_ms": 15,
-            "tokens": 2915
+            "tokens": 3108
           }
         ],
         "by_model": {
           "meta-llama/Llama-3.3-70B-Instruct": {
             "calls": 28,
-            "cost_usd": 0.005811,
+            "cost_usd": 0.005795,
             "latency_ms": 140
           },
           "openai/gpt-oss-120b": {
             "calls": 13,
-            "cost_usd": 0.000512,
+            "cost_usd": 0.000613,
             "latency_ms": 65
           }
         },

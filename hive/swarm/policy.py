@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from hive.models import ClaimStatus, InjectionEvent, JudgeVerdict
+import re
+
+from hive.models import ClaimStatus, InjectionEvent, JudgeVerdict, RawDocument
 
 QUARANTINE_SEVERITY = 0.6
 """A heuristic injection event at or above this severity quarantines every claim from its document."""
@@ -26,6 +28,39 @@ GROUNDING_MIN_TRUST = 0.7
 REASON_CORROBORATED = "corroborated: "
 REASON_GROUNDED = "single-source grounded: "
 REASON_UNGROUNDED = "ungrounded: "
+REASON_PRIMARY_OVERRIDE = "primary-source override: "
+
+PRIMARY = "primary"
+"""Source class for issuer-controlled or regulatory documents: filings, 8-Ks, newsrooms, press releases, IR pages."""
+
+SECONDARY = "secondary"
+"""Source class for third-party reporting: news, blogs, aggregators."""
+
+PRIMARY_KINDS = frozenset({"edgar"})
+"""Collector kinds whose documents are always primary sources."""
+
+PRIMARY_SOURCE_ID = re.compile(r"newsroom|press|8-?k|edgar|filing|(?:^|[^a-z0-9])ir(?:$|[^a-z0-9])", re.I)
+"""A source_id matching this names a company newsroom, press release, 8-K, filing or investor-relations feed."""
+
+PRIMARY_URL = re.compile(r"sec\.gov/|/(?:newsroom|press-releases?|investors?|ir)/|8-k", re.I)
+"""A document URL matching this points at a filing, newsroom, press-release or investor-relations page."""
+
+
+def source_class(doc: RawDocument) -> str:
+    if doc.kind in PRIMARY_KINDS or PRIMARY_SOURCE_ID.search(doc.source_id) or PRIMARY_URL.search(doc.url):
+        return PRIMARY
+    return SECONDARY
+
+
+def primary_override(
+    verdict: JudgeVerdict, reason: str, claim_class: str, contradicting_classes: list[str]
+) -> tuple[JudgeVerdict, str]:
+    if (
+        verdict == JudgeVerdict.DISAGREE and claim_class == PRIMARY and contradicting_classes
+        and all(c == SECONDARY for c in contradicting_classes)
+    ):
+        return JudgeVerdict.AGREE, REASON_PRIMARY_OVERRIDE + reason
+    return verdict, reason
 
 
 def doc_injected(events: list[InjectionEvent], canary_tripped: bool) -> bool:

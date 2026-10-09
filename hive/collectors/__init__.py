@@ -42,10 +42,19 @@ async def _safe_collect(source: dict) -> list[RawDocument]:
         return []
 
 
+def _source_order(index: int, source: dict) -> tuple:
+    """Fixtures first (by source_id, then path), then live sources in sources.yaml order. Callers cap the
+    result (heartbeat --limit), so the staged injection and contradiction docs must always lead."""
+    if source.get("kind") == "fixture":
+        return (0, str(source.get("source_id", "")), str(source.get("path", "")), index)
+    return (1, "", "", index)
+
+
 async def collect_all(sources_path: str | Path = "config/sources.yaml", kinds: set[str] | None = None) -> list[RawDocument]:
     sources = [s for s in load_sources(sources_path) if kinds is None or s.get("kind") in kinds]
     results = await asyncio.gather(*(_safe_collect(s) for s in sources))
-    docs = [doc for batch in results for doc in batch]
+    order = sorted(range(len(sources)), key=lambda i: _source_order(i, sources[i]))
+    docs = [doc for i in order for doc in results[i]]
     for doc in docs:
         try:
             doc.entities = entity_hints(doc, sources_path)

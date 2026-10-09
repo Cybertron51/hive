@@ -5,14 +5,26 @@ cd "$(dirname "$0")/.."
 RESET=0
 FORCE=0
 HEARTBEAT=1
-for a in "$@"; do
-  case "$a" in
+BRIEF=0
+INTERVAL=300
+USAGE="usage: scripts/demo_up.sh [--reset] [--force] [--no-heartbeat] [--brief] [--interval SECONDS]
+  --brief     also draft a brief each tick (costs Senso credits, off by default)
+  --interval  seconds between heartbeats (default 300)"
+while [ $# -gt 0 ]; do
+  case "$1" in
     --reset) RESET=1 ;;
     --force) FORCE=1 ;;
     --no-heartbeat) HEARTBEAT=0 ;;
-    *) echo "usage: scripts/demo_up.sh [--reset] [--force] [--no-heartbeat]"; exit 2 ;;
+    --brief) BRIEF=1 ;;
+    --interval)
+      shift
+      case "${1:-}" in ''|*[!0-9]*) echo "$USAGE"; exit 2 ;; *) INTERVAL=$1 ;; esac ;;
+    *) echo "$USAGE"; exit 2 ;;
   esac
+  shift
 done
+HB_ARGS=(--interval "$INTERVAL")
+[ "$BRIEF" = 1 ] && HB_ARGS+=(--brief)
 
 mkdir -p logs
 source scripts/_ch_mode.sh
@@ -74,7 +86,7 @@ if [ "$HEARTBEAT" = 0 ]; then
 elif [ -n "$existing" ]; then
   echo "already running (pid $(echo $existing))"
 else
-  nohup "$PY" -m hive.heartbeat --interval 90 --brief >>logs/heartbeat.log 2>&1 </dev/null &
+  nohup "$PY" -m hive.heartbeat "${HB_ARGS[@]}" >>logs/heartbeat.log 2>&1 </dev/null &
   echo $! >logs/heartbeat.pid
   sleep 3
   if alive logs/heartbeat.pid; then echo "started (pid $(cat logs/heartbeat.pid)), logging to logs/heartbeat.log"; else echo "FAILED, last log lines:"; tail -5 logs/heartbeat.log; exit 1; fi

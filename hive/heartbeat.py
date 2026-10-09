@@ -152,7 +152,7 @@ async def heartbeat_once(
     telemetry: bool = True,
     ingest: bool = True,
     brief: bool = False,
-    concurrency: int = 8,
+    concurrency: int = 16,
 ) -> dict:
     start = time.monotonic()
     store = seen or SeenStore(use_telemetry=telemetry)

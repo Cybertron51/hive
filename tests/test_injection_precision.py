@@ -97,3 +97,19 @@ def test_nullgrid_fixture_quarantined_in_corpus(monkeypatch):
     assert all(c.status == ClaimStatus.QUARANTINED for c in res.claims if c.doc_id in ids)
     assert res.trust["nullgrid_blog"] < 0.85
     assert {e.source_id for e in res.injection_events if e.severity >= policy.QUARANTINE_SEVERITY} == {"nullgrid_blog"}
+
+
+def test_system_prompt_news_stays_low():
+    text = (
+        "Researchers catalogued system prompt leakage and prompt injection as the top risks for LLM "
+        "applications, noting that vendors shipped fixes for three chatbot products this quarter."
+    )
+    events = detect(_doc(text))
+    assert all(e.severity < 0.5 for e in events), [(e.pattern, e.severity) for e in events]
+
+
+def test_system_prompt_cued_in_nullgrid_fixture():
+    events = detect(_doc(FIXTURE.read_text(encoding="utf-8"), source="nullgrid_blog"))
+    by = {e.pattern: e.severity for e in events}
+    assert by["system_prompt"] >= 0.6
+    assert max(by.values()) >= 0.6

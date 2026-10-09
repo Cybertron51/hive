@@ -141,3 +141,55 @@ def test_ungrounded_single_source_claim_quarantined(monkeypatch):
 def test_corroborated_reason_prefix(result):
     [claim] = _claims_for(result, "biopharmadive")
     assert claim.judge_reason.startswith("corroborated:")
+
+
+def _conflict(monkeypatch, docs):
+    import asyncio
+
+    from hive.models import RawDocument
+
+    fake.install(monkeypatch)
+    raw = [RawDocument(source_id=src, url=url, title=src, text=text, kind=kind) for src, url, text, kind in docs]
+    return asyncio.run(run_swarm(raw, telemetry=False, ingest=False))
+
+
+def test_primary_claim_survives_secondary_contradiction(monkeypatch):
+    res = _conflict(monkeypatch, [
+        ("acme_newsroom", "https://acme.example/news/raise", "Acme Corp raised $450M in a private placement.", "page"),
+        ("cyber_ledger", "https://ledger.example/acme", "Acme Corp raised $45M, contrary to the company figure.", "rss"),
+    ])
+    [claim] = _claims_for(res, "acme_newsroom")
+    assert claim.status == ClaimStatus.VERIFIED
+    assert claim.judge_verdict == JudgeVerdict.AGREE
+    assert claim.judge_reason.startswith("primary-source override: ")
+    assert res.trust["acme_newsroom"] == 1.0
+
+
+def test_secondary_claim_contradicted_by_primary_quarantined(monkeypatch):
+    res = _conflict(monkeypatch, [
+        ("cyber_ledger", "https://ledger.example/acme", "Acme Corp raised $45M in a private placement.", "rss"),
+        ("sec_filings", "https://sec.example/acme", "Acme Corp did not raise $45M; the 8-K reports $450M.", "edgar"),
+    ])
+    [claim] = _claims_for(res, "cyber_ledger")
+    assert claim.status == ClaimStatus.QUARANTINED
+    assert claim.judge_verdict == JudgeVerdict.DISAGREE
+    assert res.trust["cyber_ledger"] == pytest.approx(0.85)
+
+
+def test_runs_and_events_stream_once(monkeypatch):
+    import asyncio
+
+    from hive import telemetry
+
+    seen = {"run": [], "inj": [], "claim": [], "flush": 0}
+    monkeypatch.setattr(telemetry, "log_run", lambda r: seen["run"].append(r.run_id))
+    monkeypatch.setattr(telemetry, "log_injection", lambda e: seen["inj"].append(e.event_id))
+    monkeypatch.setattr(telemetry, "log_claim", lambda c: seen["claim"].append(c.claim_id))
+    monkeypatch.setattr(telemetry, "upsert_trust", lambda t: None)
+    monkeypatch.setattr(telemetry, "flush", lambda: seen.__setitem__("flush", seen["flush"] + 1))
+    fake.install(monkeypatch)
+    res = asyncio.run(run_swarm(fake.SAMPLE_DOCS, telemetry=True, ingest=False))
+    assert sorted(seen["run"]) == sorted(r.run_id for r in res.runs)
+    assert sorted(seen["inj"]) == sorted(e.event_id for e in res.injection_events)
+    assert len(seen["claim"]) == len(res.claims) and seen["flush"] >= 1
+    assert not res.sink_errors

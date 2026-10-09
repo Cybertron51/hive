@@ -4,7 +4,7 @@ from typing import Any
 
 from hive import llm
 from hive.models import AgentRun, JudgeVerdict, RawDocument, Role, RunStatus
-from hive.swarm import competitors, prompts
+from hive.swarm import competitors, policy, prompts
 from hive.swarm.injection import canary_check
 from hive.swarm.pricing import cost_usd, small_model, large_model
 
@@ -121,9 +121,27 @@ async def run_classifier(doc: RawDocument, claims: list[dict], swarm_id: str, mo
 async def run_judge(
     claim: dict, evidence_docs: list[RawDocument], swarm_id: str, model: str | None = None, doc: RawDocument | None = None
 ) -> tuple[AgentRun, dict]:
-    evidence = [(d.title, d.url, d.text) for d in evidence_docs[:3]]
-    run, data = await _call(Role.JUDGE, model or large_model(), prompts.judge_user(claim, evidence), swarm_id, doc)
-    return _parse_verdict(run, data)
+    docs = evidence_docs[:3]
+    evidence = [(d.title, d.url, d.text, policy.source_class(d)) for d in docs]
+    user = prompts.judge_user(claim, evidence, policy.source_class(doc) if doc else "")
+    run, data = await _call(Role.JUDGE, model or large_model(), user, swarm_id, doc)
+    run, parsed = _parse_verdict(run, data)
+    parsed["contradicting"] = _indices(data.get("contradicting"), len(docs))
+    return run, parsed
+
+
+def _indices(value: Any, n: int) -> list[int] | None:
+    if not isinstance(value, list):
+        return None
+    out = []
+    for v in value:
+        try:
+            i = int(v)
+        except (TypeError, ValueError):
+            continue
+        if 1 <= i <= n and i not in out:
+            out.append(i)
+    return out
 
 
 async def run_grounding(claim: dict, doc: RawDocument, swarm_id: str, model: str | None = None) -> tuple[AgentRun, dict]:
