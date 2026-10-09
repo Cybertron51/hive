@@ -17,6 +17,7 @@ _HIDDEN_STYLE = re.compile(
     re.IGNORECASE,
 )
 _XML_DECL = re.compile(r"^\s*<\?xml[^>]*\?>", re.IGNORECASE)
+_MARKUP = re.compile(r"<\s*/?\s*[a-zA-Z][^<>]*>")
 _WS = re.compile(r"[ \t\r\f\v]+")
 _BLANKS = re.compile(r"\n\s*\n+")
 _BLOCK_TAGS = {"p", "div", "li", "h1", "h2", "h3", "h4", "h5", "h6", "tr", "br", "section", "article", "blockquote", "pre", "table"}
@@ -52,13 +53,23 @@ def _tree_text(el) -> str:
     return _norm("".join(parts))
 
 
+def _comment_text(raw: str) -> str:
+    """Commented-out markup becomes its visible text (tags, attributes and URLs dropped); prose is kept as is."""
+    if _MARKUP.search(raw):
+        try:
+            return _tree_text(lxml.html.fragment_fromstring(raw, create_parent="div", parser=HTML_PARSER))
+        except (etree.ParserError, ValueError):
+            return _norm(_MARKUP.sub(" ", raw))
+    return _norm(raw)
+
+
 def _comments(root) -> list[str]:
     out = []
     for c in root.iter(etree.Comment):
         parent = c.getparent()
         if parent is not None and parent.tag in ("script", "style"):
             continue
-        t = _norm(c.text or "")
+        t = _comment_text(c.text or "")
         if t:
             out.append(t)
     return out

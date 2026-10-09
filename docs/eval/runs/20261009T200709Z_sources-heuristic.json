@@ -1,0 +1,307 @@
+{
+  "mode": "sources-heuristic",
+  "generated_at": "2026-10-09T20:07:09Z",
+  "result": {
+    "headline": {
+      "docs": 88,
+      "sources": 23,
+      "flagged_docs": 1,
+      "flag_rate": 0.0114,
+      "events": 6,
+      "detectors": "heuristic only",
+      "cost_usd": 0.0
+    },
+    "by_source": [
+      {
+        "source_id": "bleepingcomputer",
+        "kind": "rss",
+        "docs": 5,
+        "flagged": 0,
+        "flag_rate": 0.0,
+        "events": 0,
+        "severity": {},
+        "patterns": {},
+        "samples": []
+      },
+      {
+        "source_id": "cloudflare_blog",
+        "kind": "rss",
+        "docs": 5,
+        "flagged": 0,
+        "flag_rate": 0.0,
+        "events": 0,
+        "severity": {},
+        "patterns": {},
+        "samples": []
+      },
+      {
+        "source_id": "crowdstrike_blog",
+        "kind": "rss",
+        "docs": 5,
+        "flagged": 0,
+        "flag_rate": 0.0,
+        "events": 1,
+        "severity": {
+          "low (<0.5)": 1
+        },
+        "patterns": {
+          "respond_with": 1
+        },
+        "samples": []
+      },
+      {
+        "source_id": "darkreading",
+        "kind": "rss",
+        "docs": 5,
+        "flagged": 1,
+        "flag_rate": 0.2,
+        "events": 1,
+        "severity": {
+          "medium (0.5-0.7)": 1
+        },
+        "patterns": {
+          "system_prompt": 1
+        },
+        "samples": [
+          {
+            "url": "https://www.darkreading.com/cybersecurity-operations/social-engineering-ai-agents-bec-2026",
+            "title": "Social Engineering AI Agents: The New BEC for 2026",
+            "pattern": "system_prompt",
+            "severity": 0.6,
+            "detectors": [
+              "heuristic"
+            ],
+            "snippet": "hing site, unauthorized transactions, sensitive information leakage, and system prompt leakage.  Related:IANS' Kakolowski: How AI Is Reshaping CISO Budgets & Se"
+          }
+        ]
+      },
+      {
+        "source_id": "datadog_securitylabs",
+        "kind": "rss",
+        "docs": 5,
+        "flagged": 0,
+        "flag_rate": 0.0,
+        "events": 0,
+        "severity": {},
+        "patterns": {},
+        "samples": []
+      },
+      {
+        "source_id": "edgar_cloudflare",
+        "kind": "edgar",
+        "docs": 2,
+        "flagged": 0,
+        "flag_rate": 0.0,
+        "events": 1,
+        "severity": {
+          "low (<0.5)": 1
+        },
+        "patterns": {
+          "base64_blob": 1
+        },
+        "samples": []
+      },
+      {
+        "source_id": "edgar_crowdstrike",
+        "kind": "edgar",
+        "docs": 2,
+        "flagged": 0,
+        "flag_rate": 0.0,
+        "events": 0,
+        "severity": {},
+        "patterns": {},
+        "samples": []
+      },
+      {
+        "source_id": "edgar_datadog",
+        "kind": "edgar",
+        "docs": 2,
+        "flagged": 0,
+        "flag_rate": 0.0,
+        "events": 0,
+        "severity": {},
+        "patterns": {},
+        "samples": []
+      },
+      {
+        "source_id": "edgar_fortinet",
+        "kind": "edgar",
+        "docs": 2,
+        "flagged": 0,
+        "flag_rate": 0.0,
+        "events": 0,
+        "severity": {},
+        "patterns": {},
+        "samples": []
+      },
+      {
+        "source_id": "edgar_okta",
+        "kind": "edgar",
+        "docs": 2,
+        "flagged": 0,
+        "flag_rate": 0.0,
+        "events": 0,
+        "severity": {},
+        "patterns": {},
+        "samples": []
+      },
+      {
+        "source_id": "edgar_paloaltonetworks",
+        "kind": "edgar",
+        "docs": 2,
+        "flagged": 0,
+        "flag_rate": 0.0,
+        "events": 0,
+        "severity": {},
+        "patterns": {},
+        "samples": []
+      },
+      {
+        "source_id": "edgar_rapid7",
+        "kind": "edgar",
+        "docs": 2,
+        "flagged": 0,
+        "flag_rate": 0.0,
+        "events": 0,
+        "severity": {},
+        "patterns": {},
+        "samples": []
+      },
+      {
+        "source_id": "edgar_sentinelone",
+        "kind": "edgar",
+        "docs": 2,
+        "flagged": 0,
+        "flag_rate": 0.0,
+        "events": 0,
+        "severity": {},
+        "patterns": {},
+        "samples": []
+      },
+      {
+        "source_id": "edgar_zscaler",
+        "kind": "edgar",
+        "docs": 2,
+        "flagged": 0,
+        "flag_rate": 0.0,
+        "events": 0,
+        "severity": {},
+        "patterns": {},
+        "samples": []
+      },
+      {
+        "source_id": "fortinet_threat_research",
+        "kind": "rss",
+        "docs": 5,
+        "flagged": 0,
+        "flag_rate": 0.0,
+        "events": 0,
+        "severity": {},
+        "patterns": {},
+        "samples": []
+      },
+      {
+        "source_id": "krebsonsecurity",
+        "kind": "rss",
+        "docs": 5,
+        "flagged": 0,
+        "flag_rate": 0.0,
+        "events": 0,
+        "severity": {},
+        "patterns": {},
+        "samples": []
+      },
+      {
+        "source_id": "paloalto_unit42",
+        "kind": "rss",
+        "docs": 5,
+        "flagged": 0,
+        "flag_rate": 0.0,
+        "events": 2,
+        "severity": {
+          "low (<0.5)": 2
+        },
+        "patterns": {
+          "report_that": 2
+        },
+        "samples": []
+      },
+      {
+        "source_id": "rapid7_blog",
+        "kind": "rss",
+        "docs": 5,
+        "flagged": 0,
+        "flag_rate": 0.0,
+        "events": 0,
+        "severity": {},
+        "patterns": {},
+        "samples": []
+      },
+      {
+        "source_id": "securityweek",
+        "kind": "rss",
+        "docs": 5,
+        "flagged": 0,
+        "flag_rate": 0.0,
+        "events": 0,
+        "severity": {},
+        "patterns": {},
+        "samples": []
+      },
+      {
+        "source_id": "sentinelone_labs",
+        "kind": "rss",
+        "docs": 5,
+        "flagged": 0,
+        "flag_rate": 0.0,
+        "events": 0,
+        "severity": {},
+        "patterns": {},
+        "samples": []
+      },
+      {
+        "source_id": "thehackernews",
+        "kind": "rss",
+        "docs": 5,
+        "flagged": 0,
+        "flag_rate": 0.0,
+        "events": 0,
+        "severity": {},
+        "patterns": {},
+        "samples": []
+      },
+      {
+        "source_id": "wiz_blog",
+        "kind": "rss",
+        "docs": 5,
+        "flagged": 0,
+        "flag_rate": 0.0,
+        "events": 0,
+        "severity": {},
+        "patterns": {},
+        "samples": []
+      },
+      {
+        "source_id": "zscaler_threatlabz",
+        "kind": "rss",
+        "docs": 5,
+        "flagged": 0,
+        "flag_rate": 0.0,
+        "events": 1,
+        "severity": {
+          "low (<0.5)": 1
+        },
+        "patterns": {
+          "base64_blob": 1
+        },
+        "samples": []
+      }
+    ],
+    "patterns": {
+      "report_that": 2,
+      "base64_blob": 2,
+      "system_prompt": 1,
+      "respond_with": 1
+    }
+  }
+}

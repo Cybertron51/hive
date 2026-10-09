@@ -5,8 +5,8 @@
   .venv/bin/python scripts/eval.py --live [--repeat 3]     # real models over fixtures; writes docs/eval/latest.json + docs/EVAL.md
   .venv/bin/python scripts/eval.py --sources [--live]      # live feeds: injection events by source (heuristic; --live adds the canary)
 
-Never writes to ClickHouse or Senso (telemetry=False, ingest=False). Exits 1 if a planted claim or a claim
-from an injected doc reaches VERIFIED.
+Never writes to ClickHouse or Senso (telemetry=False, ingest=False). A --live run exits 1 if a planted claim
+or a claim from an injected doc reaches VERIFIED.
 """
 from __future__ import annotations
 
@@ -155,7 +155,7 @@ def main(argv: list[str] | None = None) -> int:
 
     _print_fixture_summary(fx)
     print(f"\nwrote {written}")
-    leaked = any(r["headline"]["planted_leaks"] or r["headline"]["verified_from_injected_docs"] for r in fx["runs"])
+    leaked = args.live and any(r["headline"]["planted_leaks"] or r["headline"]["verified_from_injected_docs"] for r in fx["runs"])
     if leaked:
         print("FAIL: a planted claim or a claim from an injected doc reached VERIFIED", file=sys.stderr)
     return 1 if leaked else 0

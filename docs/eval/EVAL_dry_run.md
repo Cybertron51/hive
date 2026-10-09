@@ -5,7 +5,7 @@ Ground truth: `fixtures/ground_truth.yaml`. Every vendor in the fixtures is fict
 
 ## Fixture eval
 
-Mode: **dry-run**. Models: meta-llama/Llama-3.3-70B-Instruct, openai/gpt-oss-120b. Runs: 1. Generated 2026-10-09T20:04:57Z. Docs: 14 fixture pages, scored against `fixtures/ground_truth.yaml`.
+Mode: **dry-run**. Models: meta-llama/Llama-3.3-70B-Instruct, openai/gpt-oss-120b. Runs: 1. Generated 2026-10-09T20:05:46Z. Docs: 14 fixture pages, scored against `fixtures/ground_truth.yaml`.
 
 > Dry run uses the deterministic FakeLLM. It checks that the harness works end to end; the numbers say nothing about model quality.
 

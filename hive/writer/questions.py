@@ -161,6 +161,7 @@ async def _file_gaps(answers: list[Answer]) -> None:
             try:
                 a.gap.update(await kb.record_gap(a.question, a.entity, a.gap["context"], a.gap["content_ids"] or None))
                 entry["filed"] += 1
+                entry["senso_filed"] = bool(a.gap.get("filed"))
             except SensoError as exc:
                 log.warning("gap not filed for %s: %s", k, exc)
     _save_state(state)
@@ -176,7 +177,8 @@ def digest_lines(answers: list[Answer]) -> str:
             out.append(f"- **{a.entity}: {a.key}.** {text} {refs}")
     if not done:
         out.append("_No standing question was answered by verified claims this heartbeat._")
-    out += ["", f"_{open_n} questions without a verified answer were filed to Senso's gap report as open questions._"]
+    filed = sum(1 for a in answers if not a.answered and a.gap and a.gap.get("filed"))
+    out += ["", f"_{open_n} standing questions have no verified answer yet; {filed} were sent to Senso's gap report this heartbeat._"]
     return "\n".join(out) + "\n"
 
 
@@ -188,7 +190,11 @@ async def _print_open() -> None:
     except SensoError as exc:
         senso = {}
         print(f"(Senso gap report unavailable: {exc})")
-    print(f"open questions: {len(local)}   answered: {sum(1 for v in state.values() if v.get('status') == 'answered')}")
+    in_senso = sum(1 for v in local if gap_query(v["question"], v["entity"]) in senso)
+    print(f"open questions: {len(local)}   in Senso gap report: {in_senso}   "
+          f"answered: {sum(1 for v in state.values() if v.get('status') == 'answered')}")
+    print("  (Senso files a gap only when its own retrieval returns nothing; a question it matched to other"
+          " companies' passages stays open here only)")
     for v in local:
         g = senso.get(gap_query(v["question"], v["entity"]))
         mark = f"senso:{g['status']} x{g.get('occurrence_count', 1)}" if g else "senso:-"

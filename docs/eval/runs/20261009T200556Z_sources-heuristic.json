@@ -1,0 +1,345 @@
+{
+  "mode": "sources-heuristic",
+  "generated_at": "2026-10-09T20:05:56Z",
+  "result": {
+    "headline": {
+      "docs": 88,
+      "sources": 23,
+      "flagged_docs": 5,
+      "flag_rate": 0.0568,
+      "events": 10,
+      "detectors": "heuristic only",
+      "cost_usd": 0.0
+    },
+    "by_source": [
+      {
+        "source_id": "bleepingcomputer",
+        "kind": "rss",
+        "docs": 5,
+        "flagged": 0,
+        "flag_rate": 0.0,
+        "events": 0,
+        "severity": {},
+        "patterns": {},
+        "samples": []
+      },
+      {
+        "source_id": "cloudflare_blog",
+        "kind": "rss",
+        "docs": 5,
+        "flagged": 0,
+        "flag_rate": 0.0,
+        "events": 0,
+        "severity": {},
+        "patterns": {},
+        "samples": []
+      },
+      {
+        "source_id": "crowdstrike_blog",
+        "kind": "rss",
+        "docs": 5,
+        "flagged": 0,
+        "flag_rate": 0.0,
+        "events": 1,
+        "severity": {
+          "low (<0.5)": 1
+        },
+        "patterns": {
+          "respond_with": 1
+        },
+        "samples": []
+      },
+      {
+        "source_id": "darkreading",
+        "kind": "rss",
+        "docs": 5,
+        "flagged": 0,
+        "flag_rate": 0.0,
+        "events": 0,
+        "severity": {},
+        "patterns": {},
+        "samples": []
+      },
+      {
+        "source_id": "datadog_securitylabs",
+        "kind": "rss",
+        "docs": 5,
+        "flagged": 0,
+        "flag_rate": 0.0,
+        "events": 0,
+        "severity": {},
+        "patterns": {},
+        "samples": []
+      },
+      {
+        "source_id": "edgar_cloudflare",
+        "kind": "edgar",
+        "docs": 2,
+        "flagged": 0,
+        "flag_rate": 0.0,
+        "events": 1,
+        "severity": {
+          "low (<0.5)": 1
+        },
+        "patterns": {
+          "base64_blob": 1
+        },
+        "samples": []
+      },
+      {
+        "source_id": "edgar_crowdstrike",
+        "kind": "edgar",
+        "docs": 2,
+        "flagged": 0,
+        "flag_rate": 0.0,
+        "events": 0,
+        "severity": {},
+        "patterns": {},
+        "samples": []
+      },
+      {
+        "source_id": "edgar_datadog",
+        "kind": "edgar",
+        "docs": 2,
+        "flagged": 0,
+        "flag_rate": 0.0,
+        "events": 0,
+        "severity": {},
+        "patterns": {},
+        "samples": []
+      },
+      {
+        "source_id": "edgar_fortinet",
+        "kind": "edgar",
+        "docs": 2,
+        "flagged": 0,
+        "flag_rate": 0.0,
+        "events": 0,
+        "severity": {},
+        "patterns": {},
+        "samples": []
+      },
+      {
+        "source_id": "edgar_okta",
+        "kind": "edgar",
+        "docs": 2,
+        "flagged": 0,
+        "flag_rate": 0.0,
+        "events": 0,
+        "severity": {},
+        "patterns": {},
+        "samples": []
+      },
+      {
+        "source_id": "edgar_paloaltonetworks",
+        "kind": "edgar",
+        "docs": 2,
+        "flagged": 0,
+        "flag_rate": 0.0,
+        "events": 0,
+        "severity": {},
+        "patterns": {},
+        "samples": []
+      },
+      {
+        "source_id": "edgar_rapid7",
+        "kind": "edgar",
+        "docs": 2,
+        "flagged": 0,
+        "flag_rate": 0.0,
+        "events": 0,
+        "severity": {},
+        "patterns": {},
+        "samples": []
+      },
+      {
+        "source_id": "edgar_sentinelone",
+        "kind": "edgar",
+        "docs": 2,
+        "flagged": 0,
+        "flag_rate": 0.0,
+        "events": 0,
+        "severity": {},
+        "patterns": {},
+        "samples": []
+      },
+      {
+        "source_id": "edgar_zscaler",
+        "kind": "edgar",
+        "docs": 2,
+        "flagged": 0,
+        "flag_rate": 0.0,
+        "events": 0,
+        "severity": {},
+        "patterns": {},
+        "samples": []
+      },
+      {
+        "source_id": "fortinet_threat_research",
+        "kind": "rss",
+        "docs": 5,
+        "flagged": 0,
+        "flag_rate": 0.0,
+        "events": 0,
+        "severity": {},
+        "patterns": {},
+        "samples": []
+      },
+      {
+        "source_id": "krebsonsecurity",
+        "kind": "rss",
+        "docs": 5,
+        "flagged": 0,
+        "flag_rate": 0.0,
+        "events": 0,
+        "severity": {},
+        "patterns": {},
+        "samples": []
+      },
+      {
+        "source_id": "paloalto_unit42",
+        "kind": "rss",
+        "docs": 5,
+        "flagged": 5,
+        "flag_rate": 1.0,
+        "events": 7,
+        "severity": {
+          "high (>=0.7)": 5,
+          "low (<0.5)": 2
+        },
+        "patterns": {
+          "html_comment_instruction": 5,
+          "report_that": 2
+        },
+        "samples": [
+          {
+            "url": "https://unit42.paloaltonetworks.com/web3-cloud-supply-chain-attacks/",
+            "title": "Evolution of Web3 in Cloud Supply Chain Attacks",
+            "pattern": "html_comment_instruction",
+            "severity": 0.7,
+            "detectors": [
+              "heuristic"
+            ],
+            "snippet": "<!-- <footer class=\"footer\"> <div class=\"footer-menu\"> <div class=\"l-container\"> <div class=\"footer-menu__wrapper\"> <div class=\"footer-menu-nav__wrapper\"> <h3 c"
+          },
+          {
+            "url": "https://unit42.paloaltonetworks.com/blinder-tunnel-targets-critical-infrastructure/",
+            "title": "Blinder Tunnel Campaign Targets Iraqi Infrastructure",
+            "pattern": "html_comment_instruction",
+            "severity": 0.7,
+            "detectors": [
+              "heuristic"
+            ],
+            "snippet": "<!-- <footer class=\"footer\"> <div class=\"footer-menu\"> <div class=\"l-container\"> <div class=\"footer-menu__wrapper\"> <div class=\"footer-menu-nav__wrapper\"> <h3 c"
+          },
+          {
+            "url": "https://unit42.paloaltonetworks.com/netscaler-zero-days-exploited/",
+            "title": "Threat Brief: NetScaler Zero Days CVE-2026-88771 and CVE-2026-88772 Exploited in the Wild (Updated S",
+            "pattern": "html_comment_instruction",
+            "severity": 0.7,
+            "detectors": [
+              "heuristic"
+            ],
+            "snippet": "<!-- <footer class=\"footer\"> <div class=\"footer-menu\"> <div class=\"l-container\"> <div class=\"footer-menu__wrapper\"> <div class=\"footer-menu-nav__wrapper\"> <h3 c"
+          },
+          {
+            "url": "https://unit42.paloaltonetworks.com/agentic-ai-kubernetes-operator-risks/",
+            "title": "OperTraitors: How Kubernetes Operators Betray Your Security Posture",
+            "pattern": "html_comment_instruction",
+            "severity": 0.7,
+            "detectors": [
+              "heuristic"
+            ],
+            "snippet": "<!-- <footer class=\"footer\"> <div class=\"footer-menu\"> <div class=\"l-container\"> <div class=\"footer-menu__wrapper\"> <div class=\"footer-menu-nav__wrapper\"> <h3 c"
+          },
+          {
+            "url": "https://unit42.paloaltonetworks.com/3-consulting-myths-debunked-by-unit-42-experts/",
+            "title": "3 Consulting Myths Debunked by Unit 42 Experts",
+            "pattern": "html_comment_instruction",
+            "severity": 0.7,
+            "detectors": [
+              "heuristic"
+            ],
+            "snippet": "<!-- <footer class=\"footer\"> <div class=\"footer-menu\"> <div class=\"l-container\"> <div class=\"footer-menu__wrapper\"> <div class=\"footer-menu-nav__wrapper\"> <h3 c"
+          }
+        ]
+      },
+      {
+        "source_id": "rapid7_blog",
+        "kind": "rss",
+        "docs": 5,
+        "flagged": 0,
+        "flag_rate": 0.0,
+        "events": 0,
+        "severity": {},
+        "patterns": {},
+        "samples": []
+      },
+      {
+        "source_id": "securityweek",
+        "kind": "rss",
+        "docs": 5,
+        "flagged": 0,
+        "flag_rate": 0.0,
+        "events": 0,
+        "severity": {},
+        "patterns": {},
+        "samples": []
+      },
+      {
+        "source_id": "sentinelone_labs",
+        "kind": "rss",
+        "docs": 5,
+        "flagged": 0,
+        "flag_rate": 0.0,
+        "events": 0,
+        "severity": {},
+        "patterns": {},
+        "samples": []
+      },
+      {
+        "source_id": "thehackernews",
+        "kind": "rss",
+        "docs": 5,
+        "flagged": 0,
+        "flag_rate": 0.0,
+        "events": 0,
+        "severity": {},
+        "patterns": {},
+        "samples": []
+      },
+      {
+        "source_id": "wiz_blog",
+        "kind": "rss",
+        "docs": 5,
+        "flagged": 0,
+        "flag_rate": 0.0,
+        "events": 0,
+        "severity": {},
+        "patterns": {},
+        "samples": []
+      },
+      {
+        "source_id": "zscaler_threatlabz",
+        "kind": "rss",
+        "docs": 5,
+        "flagged": 0,
+        "flag_rate": 0.0,
+        "events": 1,
+        "severity": {
+          "low (<0.5)": 1
+        },
+        "patterns": {
+          "base64_blob": 1
+        },
+        "samples": []
+      }
+    ],
+    "patterns": {
+      "html_comment_instruction": 5,
+      "report_that": 2,
+      "base64_blob": 2,
+      "respond_with": 1
+    }
+  }
+}
