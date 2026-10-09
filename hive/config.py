@@ -8,10 +8,12 @@ class Settings(BaseSettings):
     akashml_base_url: str = "https://api.akashml.com/v1"
     akashml_model_small: str = ""
     akashml_model_large: str = ""
+    akashml_model_writer: str = "Qwen/Qwen3.8-27B"
     senso_api_key: str = ""
     senso_base_url: str = "https://apiv2.senso.ai/api/v1"
     clickhouse_url: str = "http://localhost:8123"
     clickhouse_db: str = "hive"
+    clickhouse_password: str = ""
 
 
 settings = Settings()

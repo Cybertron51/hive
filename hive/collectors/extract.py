@@ -8,6 +8,8 @@ import lxml.html
 from lxml import etree
 from readability import Document
 
+from hive.collectors._common import HTML_PARSER
+
 _HIDDEN_STYLE = re.compile(
     r"display\s*:\s*none|visibility\s*:\s*hidden|font-size\s*:\s*0|opacity\s*:\s*0(?:\.0+)?\b"
     r"|color\s*:\s*(?:#fff(?:fff)?\b|white\b|rgb\(\s*255\s*,\s*255\s*,\s*255\s*\)|transparent\b)"
@@ -77,14 +79,14 @@ def _hidden_texts(root) -> list[str]:
 def html_to_text(html: str) -> tuple[str, str]:
     if not html or not html.strip():
         return "", ""
-    root = lxml.html.document_fromstring(html)
+    root = lxml.html.document_fromstring(html, parser=HTML_PARSER)
 
     title = ""
     main = ""
     try:
         doc = Document(html)
         title = (doc.short_title() or "").strip()
-        main = _tree_text(lxml.html.fragment_fromstring(doc.summary(html_partial=True)))
+        main = _tree_text(lxml.html.fragment_fromstring(doc.summary(html_partial=True), parser=HTML_PARSER))
     except Exception:
         pass
     if not title:

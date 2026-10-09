@@ -121,7 +121,7 @@ def main(argv: list[str] | None = None) -> int:
         from hive.swarm import fake
 
         fake.install()
-        docs = load_fixtures(args.limit) or fake.SAMPLE_DOCS[: args.limit]
+        docs = asyncio.run(collect(args.sources, args.limit, {"fixture"})) or fake.SAMPLE_DOCS[: args.limit]
     else:
         docs = asyncio.run(collect(args.sources, args.limit, {k for k in args.kinds.split(",") if k} or None))
     if not docs:

@@ -121,3 +121,12 @@ def scout(sources: list[str], entity: str, trust: dict[str, float] | None = None
     ranked = sorted(sources, key=lambda s: trust.get(s, 1.0), reverse=True)
     queries = [entity] + [f"{entity} {kind.replace('_', ' ')}" for kind in prompts.LABELS if kind != "other"]
     return {"queries": queries, "prioritized_sources": [s for s in ranked if trust.get(s, 1.0) > 0.0]}
+
+
+async def run_injection(doc: RawDocument, swarm_id: str, model: str | None = None) -> tuple[AgentRun, dict]:
+    run, data = await _call(Role.INJECTION, model or large_model(), prompts.reader_user(doc.title, doc.url, doc.text), swarm_id, doc)
+    if run.status in (RunStatus.ERROR, RunStatus.MALFORMED):
+        return run, {}
+    run.confidence = _num(data.get("confidence"), 0.5)
+    run.label = "injection" if run.canary_tripped else "clean"
+    return run, data

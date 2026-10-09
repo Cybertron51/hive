@@ -64,3 +64,36 @@ def test_reroute_runs_large_reader(monkeypatch, text, expected):
     assert sum(1 for r in res.runs if r.role == "reader") == 2
     assert any(r.status == RunStatus.REROUTED for r in res.runs)
     assert res.claims[0].status == expected
+
+
+def test_unconfirmed_canary_is_cleared(monkeypatch):
+    import asyncio
+
+    from hive.llm import LLMResult
+
+    async def noisy(model, system, user, schema_hint, temperature=0.0):
+        result = await fake.fake_chat_json(model, system, user, schema_hint, temperature)
+        if "ROLE: reader" in system:
+            result.data["injection_suspected"] = True
+            result.data["injection_quote"] = "Acme Bio is a fictional company."
+        return LLMResult(**{**result.model_dump(), "data": result.data})
+
+    monkeypatch.setattr("hive.llm.chat_json", noisy)
+    res = asyncio.run(run_swarm(fake.SAMPLE_DOCS[:2], telemetry=False, ingest=False))
+    assert any(r.role == "injection" for r in res.runs)
+    assert not res.injection_events
+    assert all(c.status == ClaimStatus.VERIFIED for c in res.claims)
+
+
+def test_fixture_corpus_quarantines_helixon_blog(monkeypatch):
+    import asyncio
+
+    collectors = pytest.importorskip("hive.collectors")
+    fake.install(monkeypatch)
+    docs = asyncio.run(collectors.collect_all(kinds={"fixture"}))
+    if not docs:
+        pytest.skip("no fixture docs")
+    res = asyncio.run(run_swarm(docs, telemetry=False, ingest=False))
+    blog = [c for c in res.claims if c.source_id == "helixon_blog"]
+    assert blog and all(c.status == ClaimStatus.QUARANTINED for c in blog)
+    assert res.trust["helixon_blog"] < 1.0

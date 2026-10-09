@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
+from hive.config import settings
 from hive.llm import chat_json
 from hive.models import AgentRun, Role, RunStatus
 from hive.senso.client import Passage, SensoError, get_kb
@@ -68,7 +69,8 @@ def _render(entity: str, question: str, sentences: list[dict], passages: list[Pa
     return "\n".join(lines) + "\n", citations, dropped
 
 
-async def write_brief(entity: str, question: str, model: str, swarm_id: str = "") -> Brief:
+async def write_brief(entity: str, question: str, model: str | None = None, swarm_id: str = "") -> Brief:
+    model = model or settings.akashml_model_writer
     run = AgentRun(swarm_id=swarm_id, role=Role.WRITER, model=model, label="brief")
     query = question if entity.lower() in question.lower() else f"{entity}: {question}"
 
@@ -109,12 +111,11 @@ if __name__ == "__main__":
     import asyncio
     from pathlib import Path
 
-    from hive.config import settings
 
     ap = argparse.ArgumentParser(description="Write a cited brief from the verified knowledge base.")
     ap.add_argument("entity")
     ap.add_argument("question")
-    ap.add_argument("--model", default=settings.akashml_model_large)
+    ap.add_argument("--model", default=settings.akashml_model_writer)
     ap.add_argument("--out", type=Path)
     args = ap.parse_args()
 

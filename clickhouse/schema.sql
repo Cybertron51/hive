@@ -42,10 +42,11 @@ CREATE TABLE IF NOT EXISTS hive.claims
     judge_verdict LowCardinality(String),
     judge_reason  String,
     senso_node_id String,
-    created_at    DateTime64(3, 'UTC')
+    created_at    DateTime64(3, 'UTC'),
+    updated_at    DateTime64(3, 'UTC')
 )
-ENGINE = MergeTree
-ORDER BY (source_id, created_at);
+ENGINE = ReplacingMergeTree(updated_at)
+ORDER BY claim_id;
 
 CREATE TABLE IF NOT EXISTS hive.injection_events
 (

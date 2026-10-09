@@ -93,7 +93,7 @@ async def fake_chat_json(model: str, system: str, user: str, schema_hint: str, t
     elif "ROLE: judge" in system:
         data = _judge(user)
     else:
-        data = {"injection_suspected": bool(TRIGGER.search(text)), "injection_quote": "", "confidence": 0.5}
+        data = {"injection_suspected": bool(TRIGGER.search(text)), "injection_quote": _quote(text), "confidence": 0.9}
     raw = json.dumps(data)
     return LLMResult(data=data, raw=raw, prompt_tokens=(len(system) + len(user)) // 4,
                      completion_tokens=len(raw) // 4, latency_ms=5)

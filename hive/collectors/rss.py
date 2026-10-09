@@ -1,15 +1,23 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from calendar import timegm
 from datetime import datetime, timezone
 
 import feedparser
 import httpx
 
-from hive.collectors._common import TIMEOUT, USER_AGENT
+from hive.collectors._common import UnsafeURLError, ResponseTooLargeError, decode, make_client, safe_get
 from hive.collectors.extract import html_to_text
 from hive.models import RawDocument
+
+_ENTITY_DECL = re.compile(rb"<!ENTITY", re.IGNORECASE)
+MAX_ITEMS_CAP = 50
+
+
+class UnsafeFeedError(ValueError):
+    pass
 
 
 def _entry_dt(entry) -> datetime | None:
@@ -17,30 +25,30 @@ def _entry_dt(entry) -> datetime | None:
     return datetime.fromtimestamp(timegm(st), tz=timezone.utc) if st else None
 
 
+def parse_feed(body: bytes):
+    if _ENTITY_DECL.search(body):
+        raise UnsafeFeedError("feed declares XML entities (possible XXE / billion laughs)")
+    return feedparser.parse(body, resolve_relative_uris=False, sanitize_html=True)
+
+
 async def _fetch_article(client: httpx.AsyncClient, url: str) -> tuple[str, str]:
     try:
-        resp = await client.get(url)
-        resp.raise_for_status()
-        return html_to_text(resp.text)
-    except httpx.HTTPError:
+        _, body, ctype = await safe_get(client, url)
+        return html_to_text(decode(body, ctype))
+    except (httpx.HTTPError, UnsafeURLError, ResponseTooLargeError):
         return "", ""
 
 
 async def collect(source: dict) -> list[RawDocument]:
-    max_items = int(source.get("max_items", 10))
+    max_items = min(int(source.get("max_items", 10)), MAX_ITEMS_CAP)
     fetch_full = source.get("fetch_full", True)
-    async with httpx.AsyncClient(timeout=TIMEOUT, follow_redirects=True, headers={"User-Agent": USER_AGENT}) as client:
-        resp = await client.get(source["url"])
-        resp.raise_for_status()
-        feed = feedparser.parse(resp.content)
+    async with make_client() as client:
+        _, body, _ = await safe_get(client, source["url"])
+        feed = parse_feed(body)
         entries = feed.entries[:max_items]
-        links = [e.get("link", "") for e in entries]
-        articles = (
-            await asyncio.gather(*(_fetch_article(client, u) for u in links if u))
-            if fetch_full
-            else []
-        )
-    full = dict(zip([u for u in links if u], articles))
+        links = [e.get("link", "") for e in entries if e.get("link")]
+        articles = await asyncio.gather(*(_fetch_article(client, u) for u in links)) if fetch_full else []
+    full = dict(zip(links, articles))
 
     docs = []
     for e in entries:

@@ -1,6 +1,6 @@
 # ClickHouse telemetry for Hive
 
-Database `hive`: `agent_runs`, `claims`, `injection_events`, `source_trust` (ReplacingMergeTree), plus seven views in `queries.sql`.
+Database `hive`: `agent_runs`, `claims`, `injection_events`, `source_trust` (ReplacingMergeTree), plus views in `queries.sql`. `claims` is ReplacingMergeTree on `updated_at`, so bump `updated_at` whenever a claim's status changes.
 
 ## Start
 
@@ -11,8 +11,10 @@ docker compose -f clickhouse/docker-compose.yml up -d
 ## Load schema and views (idempotent, drops the old `guard` db)
 
 ```sh
-cat clickhouse/schema.sql clickhouse/queries.sql | docker exec -i tokenshackathon-clickhouse clickhouse-client -n
+scripts/apply_schema.sh
 ```
+
+Clear all four tables with `scripts/reset_db.sh`. Changing a table's engine needs a manual `DROP TABLE` first, since the schema uses `IF NOT EXISTS`.
 
 ## Seed demo data
 
@@ -32,7 +34,7 @@ docker exec -it tokenshackathon-clickhouse clickhouse-client -q "SELECT * FROM h
 cd dashboard && python -m http.server 8080
 ```
 
-Open http://localhost:8080. It polls ClickHouse HTTP on :8123 every 2s.
+Open http://localhost:8080. It polls ClickHouse HTTP on :8123 every 2s. The "latest swarm only" toggle (on by default) filters every swarm-scoped panel to the newest swarm_id; source trust is global.
 
 ## From the swarm
 

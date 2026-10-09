@@ -29,7 +29,7 @@ COLUMNS: dict[str, list[str]] = {
     "claims": [
         "claim_id", "run_id", "doc_id", "source_id", "entity", "claim_type",
         "text", "value", "confidence", "status", "judge_verdict",
-        "judge_reason", "senso_node_id", "created_at",
+        "judge_reason", "senso_node_id", "created_at", "updated_at",
     ],
     "injection_events": [
         "event_id", "ts", "swarm_id", "run_id", "doc_id", "source_id",
@@ -57,7 +57,7 @@ def _get_client() -> Any:
             port=u.port or (8443 if u.scheme == "https" else 8123),
             secure=u.scheme == "https",
             username=u.username or "default",
-            password=u.password or "",
+            password=u.password or settings.clickhouse_password,
             database=settings.clickhouse_db,
             connect_timeout=2,
             send_receive_timeout=10,
@@ -107,6 +107,7 @@ def log_claim(claim: Claim) -> None:
             claim.entity, claim.claim_type, claim.text, claim.value,
             claim.confidence, str(claim.status), str(claim.judge_verdict),
             claim.judge_reason, claim.senso_node_id, claim.created_at,
+            claim.updated_at,
         ])
     except Exception as exc:
         log.warning("log_claim dropped: %s", exc)

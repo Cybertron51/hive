@@ -15,6 +15,11 @@
   header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; }
   h1 { font-size: 16px; margin: 0; }
   #status { color: var(--muted); font-size: 12px; }
+  .toggle { color: var(--ink2); font-size: 12px; cursor: pointer; }
+  #summary { background: var(--surface); border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; color: var(--ink2); }
+  #summary b { color: var(--ink); font-variant-numeric: tabular-nums; }
+  #summary span.sep { color: var(--muted); margin: 0 8px; }
+  section.wide { grid-column: 1 / -1; }
   #status.err { color: var(--crit); }
   main { display: grid; grid-template-columns: repeat(auto-fit, minmax(560px, 1fr)); gap: 12px; }
   section { background: var(--surface); border-radius: 8px; padding: 12px; min-width: 0; }
@@ -37,8 +42,14 @@
 </style>
 </head>
 <body>
-<header><h1>Hive swarm monitor</h1><span id="status">connecting…</span></header>
+<header>
+  <h1>Hive swarm monitor</h1>
+  <label class="toggle"><input type="checkbox" id="latestOnly" checked> latest swarm only</label>
+  <span id="status">connecting…</span>
+</header>
+<div id="summary">loading…</div>
 <main>
+  <section class="wide"><h2>Swarm timeline: runs per 10s by status (latest swarm)</h2><div id="timeline"></div></section>
   <section><h2>Runs per minute by model</h2><div id="runs"></div></section>
   <section><h2>Confidence histogram by role</h2><div id="conf"></div></section>
   <section><h2>Quarantine queue</h2><div id="quarantine" class="tbl"></div></section>
@@ -71,11 +82,12 @@ function showTip(e, html) {
 }
 function hideTip() { tip.style.display = "none"; }
 
-async function q(view) {
-  const r = await fetch(CH, { method: "POST", body: `SELECT * FROM hive.${view}` });
-  if (!r.ok) throw new Error(`${view}: ${r.status}`);
+async function sql(text) {
+  const r = await fetch(CH, { method: "POST", body: text });
+  if (!r.ok) throw new Error(`${r.status} ${(await r.text()).slice(0, 200)}`);
   return (await r.json()).data;
 }
+const lit = v => "'" + String(v).replace(/\\/g, "\\\\").replace(/'/g, "\\'") + "'";
 
 function el(name, attrs, parent) {
   const n = document.createElementNS(NS, name);
@@ -221,22 +233,100 @@ function renderTrust(rows) {
   ], rows, "no sources");
 }
 
+const STATUSES = [["ok", "#0ca30c"], ["malformed", "#fab219"], ["quarantined", "#ec835a"], ["rerouted", "#3987e5"], ["error", "#d03b3b"]];
+
+function renderTimeline(rows) {
+  const host = $("timeline");
+  rows = rows.slice(-60);
+  if (!rows.length) return empty(host, "no runs yet");
+  const W = 1100, H = 200, m = { l: 34, r: 10, t: 8, b: 22 };
+  host.innerHTML = `<div class="legend">${STATUSES.map(([k, c]) => `<span><i style="background:${c}"></i>${k}</span>`).join("")}</div>`;
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}` });
+  host.appendChild(svg);
+  const totals = rows.map(r => STATUSES.reduce((a, [k]) => a + +r[k], 0));
+  const max = Math.max(...totals, 1);
+  yAxis(svg, max, W, H, m, v => Math.round(v));
+  const bw = (W - m.l - m.r) / rows.length;
+  rows.forEach((r, i) => {
+    let acc = 0;
+    STATUSES.forEach(([k, c]) => {
+      const v = +r[k];
+      if (!v) return;
+      const h = ((H - m.t - m.b) * v) / max;
+      const y = H - m.b - ((H - m.t - m.b) * (acc + v)) / max;
+      acc += v;
+      const rect = el("rect", { x: m.l + i * bw + 1, y: y + 1, width: Math.max(bw - 2, 1), height: Math.max(h - 2, 1), fill: c }, svg);
+      rect.addEventListener("mousemove", e => showTip(e, `<b>${esc(String(r.bucket).slice(11, 19))}</b> ${k}: ${v}`));
+      rect.addEventListener("mouseleave", hideTip);
+    });
+  });
+  [0, rows.length - 1].forEach(i => {
+    el("text", { x: m.l + i * bw + (i ? bw : 0), y: H - 6, "text-anchor": i ? "end" : "start" }, svg).textContent = String(rows[i].bucket).slice(11, 19);
+  });
+}
+
 const panels = [
-  ["runs_per_minute_by_model", renderRuns], ["confidence_histogram", renderConf],
-  ["quarantine_queue", renderQuarantine], ["injection_recent", renderInjections],
-  ["misclassification_by_model", renderMiscls], ["cost_by_model", renderCost],
-  ["source_trust_current", renderTrust],
+  { view: "runs_per_minute_by_model", render: renderRuns,
+    all: "SELECT minute, model, sum(runs) AS runs, sum(failed) AS failed FROM hive.runs_per_minute_by_model GROUP BY minute, model ORDER BY minute, model",
+    tail: "ORDER BY minute, model" },
+  { view: "confidence_histogram", render: renderConf,
+    all: "SELECT role, bucket, sum(runs) AS runs FROM hive.confidence_histogram GROUP BY role, bucket ORDER BY role, bucket",
+    tail: "ORDER BY role, bucket" },
+  { view: "quarantine_queue", render: renderQuarantine,
+    all: "SELECT * FROM hive.quarantine_queue ORDER BY created_at DESC LIMIT 100", tail: "ORDER BY created_at DESC LIMIT 100" },
+  { view: "injection_recent", render: renderInjections,
+    all: "SELECT * FROM hive.injection_recent ORDER BY ts DESC LIMIT 50", tail: "ORDER BY ts DESC LIMIT 50" },
+  { view: "misclassification_by_model", render: renderMiscls,
+    all: "SELECT model, j AS judged, d AS disagreed, round(d / nullIf(j, 0), 3) AS disagree_rate FROM (SELECT model, sum(judged) AS j, sum(disagreed) AS d FROM hive.misclassification_by_model GROUP BY model) ORDER BY disagree_rate DESC",
+    tail: "ORDER BY disagree_rate DESC" },
+  { view: "cost_by_model", render: renderCost,
+    all: "SELECT model, r AS runs, pt AS prompt_tokens, ct AS completion_tokens, round(c, 4) AS cost_usd FROM (SELECT model, sum(runs) AS r, sum(prompt_tokens) AS pt, sum(completion_tokens) AS ct, sum(cost_usd) AS c FROM hive.cost_by_model GROUP BY model) ORDER BY c DESC",
+    tail: "ORDER BY cost_usd DESC" },
+  { view: "source_trust_current", render: renderTrust, all: "SELECT * FROM hive.source_trust_current", unscoped: true },
+  { view: "runs_timeline", render: renderTimeline, all: "SELECT * FROM hive.runs_timeline ORDER BY bucket", unscoped: true },
 ];
+
+function panelSql(p, swarm) {
+  if (!swarm || p.unscoped) return p.all;
+  return `SELECT * FROM hive.${p.view} WHERE swarm_id = ${lit(swarm)} ${p.tail}`;
+}
+
+function renderSummary(latest, injections, claims) {
+  const host = $("summary");
+  if (!latest) { host.textContent = "no swarm has logged runs yet"; return; }
+  const by = Object.fromEntries(claims.map(c => [c.status, +c.claims]));
+  const total = claims.reduce((a, c) => a + +c.claims, 0);
+  const statuses = ["pending", "verified", "quarantined", "rejected"].map(k => `${k} <b>${by[k] || 0}</b>`).join(" · ");
+  host.innerHTML = `swarm <b>${esc(latest.swarm_id)}</b><span class="sep">|</span>runs <b>${esc(latest.runs)}</b>` +
+    `<span class="sep">|</span>claims <b>${total}</b> (${statuses})` +
+    `<span class="sep">|</span>injection events <b>${esc(injections)}</b>`;
+}
 async function tick() {
-  const results = await Promise.allSettled(panels.map(([v]) => q(v)));
-  let failed = 0;
+  let failed = 0, swarm = null;
+  try {
+    const latest = (await sql("SELECT * FROM hive.latest_swarm"))[0] || null;
+    if (latest) {
+      const id = lit(latest.swarm_id);
+      const [inj, claims] = await Promise.all([
+        sql(`SELECT injections FROM hive.injection_counts WHERE swarm_id = ${id}`),
+        sql(`SELECT status, claims FROM hive.claims_by_status WHERE swarm_id = ${id}`),
+      ]);
+      renderSummary(latest, inj[0] ? inj[0].injections : 0, claims);
+      if ($("latestOnly").checked) swarm = latest.swarm_id;
+    } else {
+      renderSummary(null, 0, []);
+    }
+  } catch (e) { failed++; }
+  const results = await Promise.allSettled(panels.map(p => sql(panelSql(p, swarm))));
   results.forEach((r, i) => {
-    if (r.status === "fulfilled") panels[i][1](r.value); else failed++;
+    if (r.status === "fulfilled") panels[i].render(r.value); else { failed++; console.error(panels[i].view, r.reason); }
   });
   const s = $("status");
   s.className = failed ? "err" : "";
-  s.textContent = failed ? `ClickHouse error on ${failed} panel(s)` : `live · UTC times · updated ${new Date().toLocaleTimeString()}`;
+  document.body.dataset.h = document.documentElement.scrollHeight;
+  s.textContent = failed ? `ClickHouse error on ${failed} query(ies)` : `live · UTC times · updated ${new Date().toLocaleTimeString()}`;
 }
+$("latestOnly").addEventListener("change", tick);
 tick();
 setInterval(tick, 2000);
 </script>

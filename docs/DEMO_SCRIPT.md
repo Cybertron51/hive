@@ -60,6 +60,16 @@ Dashboard: low-confidence and quarantine queue.
 
 > "The writer reads only from Senso's verified claims. Every sentence carries a citation, and the code drops any sentence the model returns without a valid one."
 
+Then the trap question, which is not in the KB:
+
+```sh
+.venv/bin/python -m hive.writer.brief "<ENTITY>" "What is <ENTITY>'s stock price and market cap?"
+```
+
+Expected output: `_No verified claims in the knowledge base answer this question._`
+
+> "The KB has nothing on the stock price, so the writer refuses instead of guessing, even though passages about the company were retrieved. It doesn't fill gaps with outside knowledge."
+
 Then the live query on stage:
 
 ```sh

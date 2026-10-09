@@ -6,6 +6,7 @@ from hive.config import settings
 PRICES = {
     "meta-llama/Llama-3.3-70B-Instruct": {"input": 0.20, "output": 0.52},
     "Qwen/Qwen3.8-27B": {"input": 0.225, "output": 1.98},
+    "openai/gpt-oss-120b": {"input": 0.037, "output": 0.187},
     "openai/gpt-oss-20b": {"input": 0.02, "output": 0.10},
 }
 

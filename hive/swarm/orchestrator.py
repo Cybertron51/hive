@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 
 from hive.models import (
-    AgentRun, Claim, ClaimStatus, Detector, InjectionEvent, JudgeVerdict, RawDocument, RunStatus, SourceTrust, new_id,
+    AgentRun, Claim, ClaimStatus, Detector, InjectionEvent, JudgeVerdict, RawDocument, RunStatus, SourceTrust, new_id, now,
 )
 from hive.swarm import agents, policy
 from hive.swarm.injection import detect
@@ -55,6 +55,24 @@ def _blend(claim_conf: float, classifier_conf: float | None) -> float:
     return claim_conf if classifier_conf is None else min(claim_conf, classifier_conf)
 
 
+async def _confirm_canary(state: _DocState, tripped: list[tuple[AgentRun, dict]], swarm_id: str, result: SwarmResult) -> None:
+    if not tripped:
+        return
+    confirmed = policy.doc_injected(state.heuristic, False)
+    if not confirmed:
+        run, out = await agents.run_injection(state.doc, swarm_id, large_model())
+        result.runs.append(run)
+        confirmed = run.canary_tripped or run.status in (RunStatus.ERROR, RunStatus.MALFORMED)
+        if run.canary_tripped:
+            result.injection_events.append(_canary_event(run, state.doc, out))
+    if confirmed:
+        state.canary = True
+        result.injection_events.extend(_canary_event(r, state.doc, out) for r, out in tripped)
+        return
+    for r, _ in tripped:
+        r.status, r.injection_flag = RunStatus.OK, False
+
+
 async def _process_doc(doc: RawDocument, swarm_id: str, sem: asyncio.Semaphore, result: SwarmResult) -> _DocState:
     state = _DocState(doc=doc, heuristic=detect(doc, swarm_id))
     result.injection_events.extend(state.heuristic)
@@ -63,16 +81,12 @@ async def _process_doc(doc: RawDocument, swarm_id: str, sem: asyncio.Semaphore, 
         result.runs.append(reader_run)
         state.reader_run = reader_run
         state.claims = reader_out.get("claims", [])
-        if reader_run.canary_tripped:
-            state.canary = True
-            result.injection_events.append(_canary_event(reader_run, doc, reader_out))
         cls_run, cls_out = await agents.run_classifier(doc, state.claims, swarm_id, small_model())
         result.runs.append(cls_run)
         if cls_run.status in (RunStatus.OK, RunStatus.QUARANTINED):
             state.classifier_conf = cls_out.get("confidence")
-        if cls_run.canary_tripped:
-            state.canary = True
-            result.injection_events.append(_canary_event(cls_run, doc, cls_out))
+        tripped = [(r, o) for r, o in ((reader_run, reader_out), (cls_run, cls_out)) if r.canary_tripped]
+        await _confirm_canary(state, tripped, swarm_id, result)
     if state.injected:
         for run in (reader_run, cls_run):
             if run.status == RunStatus.OK:
@@ -88,10 +102,8 @@ async def _reroute(state: _DocState, swarm_id: str, sem: asyncio.Semaphore, resu
         state.reader_run.status = RunStatus.REROUTED
     async with sem:
         run, out = await agents.run_reader(state.doc, swarm_id, large_model())
-    result.runs.append(run)
-    if run.canary_tripped:
-        state.canary = True
-        result.injection_events.append(_canary_event(run, state.doc, out))
+        result.runs.append(run)
+    await _confirm_canary(state, [(run, out)] if run.canary_tripped else [], swarm_id, result)
     if run.status not in (RunStatus.OK, RunStatus.QUARANTINED):
         return
     fresh = {(c["entity"].lower(), c["claim_type"]): c for c in out.get("claims", [])}
@@ -132,7 +144,7 @@ async def _judge_claim(
         run_id=c.get("reader_run_id") or (state.reader_run.run_id if state.reader_run else new_id()),
         doc_id=state.doc.doc_id, source_id=state.doc.source_id, entity=c["entity"], claim_type=c["claim_type"],
         text=c["text"], value=c["value"], confidence=confidence, status=status,
-        judge_verdict=verdict, judge_reason=reason,
+        judge_verdict=verdict, judge_reason=reason, updated_at=now(),
     )
 
 
