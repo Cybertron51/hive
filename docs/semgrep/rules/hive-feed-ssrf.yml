@@ -1,0 +1,62 @@
+rules:
+  - id: hive-untrusted-feed-link-ssrf
+    message: >-
+      URL taken from a parsed feed entry reaches an HTTP client without host validation.
+      A feed is attacker-controlled input; an <item><link> can point the collector at
+      localhost services or cloud metadata (CWE-918). Route the URL through a validator
+      that allows only http(s), rejects private, loopback and link-local addresses, and
+      re-checks every redirect hop.
+    severity: ERROR
+    languages: [python]
+    metadata:
+      cwe: "CWE-918: Server-Side Request Forgery (SSRF)"
+      category: security
+      subcategory: [vuln]
+      likelihood: HIGH
+      impact: HIGH
+      confidence: MEDIUM
+      references:
+        - https://cwe.mitre.org/data/definitions/918.html
+    mode: taint
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: feedparser.parse(...).entries
+              - pattern: $FEED.entries
+              - pattern: $ENTRY.get("link", ...)
+              - pattern: $ENTRY.link
+              - pattern: $ENTRY["link"]
+    pattern-propagators:
+      - pattern: |
+          [$X for $X in $ITER]
+        from: $ITER
+        to: $X
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $CLIENT.get($URL, ...)
+              - pattern: $CLIENT.post($URL, ...)
+              - pattern: $CLIENT.request($METHOD, $URL, ...)
+              - pattern: httpx.get($URL, ...)
+              - pattern: requests.get($URL, ...)
+          - metavariable-regex:
+              metavariable: $CLIENT
+              regex: ^(client|session|http|httpx|requests|self\.client|self\.session)$
+          - focus-metavariable: $URL
+    pattern-sanitizers:
+      - pattern: validate_url(...)
+      - pattern: safe_get(...)
+      - pattern: hive.collectors._common.validate_url(...)
+  - id: hive-httpx-follow-redirects-unvalidated
+    message: >-
+      httpx client created with follow_redirects=True. Each redirect hop is a new
+      destination; validate the target of every hop or follow redirects manually.
+    severity: WARNING
+    languages: [python]
+    metadata:
+      cwe: "CWE-918: Server-Side Request Forgery (SSRF)"
+      category: security
+    patterns:
+      - pattern-either:
+          - pattern: httpx.AsyncClient(..., follow_redirects=True, ...)
+          - pattern: httpx.Client(..., follow_redirects=True, ...)
