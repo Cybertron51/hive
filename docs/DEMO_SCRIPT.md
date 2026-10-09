@@ -1,85 +1,84 @@
 # Hive demo script (3:00)
 
-Setup before recording: ClickHouse up, `.env` filled, dashboard open in a browser tab, one terminal at the repo root, `data/kb.json` and the `hive` database empty.
+Hive is competitive intelligence on security companies, run as a recurring heartbeat. It follows real vendors through live feeds, plus a fictional fixture set that stages the attack.
+
+## Before recording
 
 ```sh
-docker compose -f clickhouse/docker-compose.yml up -d
-cat clickhouse/schema.sql clickhouse/queries.sql | docker exec -i tokenshackathon-clickhouse clickhouse-client -n
-rm -f data/kb.json
+scripts/ch_up.sh                 # ClickHouse (loopback only)
+scripts/demo_up.sh --reset       # dashboard on :8080, preflight, heartbeat --interval 90 --brief in the background
 ```
 
-Lines marked `TODO(A)` depend on the orchestrator CLI; confirm the exact command once it lands.
+- Let one heartbeat finish, so the dashboard shows "yesterday's" run when you start.
+- Open http://localhost:8080/ in a browser.
+- Keep one terminal at the repo root.
+- Have `config/competitors.yaml` open in an editor tab.
 
-## 0:00 to 0:20 Hook
+## 0:00 to 0:20 Hook and competitor set (beat 1)
 
-> "Agents that scrape the open web read untrusted text thousands of times a day. Hive is a swarm of cheap open-weight agents doing competitive intelligence on biotech companies, and a monitoring plane that treats the swarm itself as the thing under attack."
+Show `config/competitors.yaml` (CrowdStrike, Palo Alto Networks, SentinelOne, Zscaler, Fortinet, Okta, Wiz, Cloudflare, Datadog, Rapid7), then the idle dashboard showing the last heartbeat.
 
-## 0:20 to 0:50 Kick off the swarm
+> "Hive tracks our competitors across the open web: press releases, vendor blogs, security news, SEC filings. It's a swarm of cheap open-weight agents, and because it reads untrusted text all day, the swarm itself is the attack surface. The monitoring plane is the product."
+
+## 0:20 to 0:45 Trigger a heartbeat (beats 2 and 3)
 
 ```sh
-.venv/bin/python -m hive.orchestrator --targets config/targets.yaml --fixtures fixtures/   # TODO(A): confirm flags
+.venv/bin/python -m hive.heartbeat --once --brief
 ```
 
-Switch to the dashboard. Point at runs per minute by model climbing, and at the role, model, latency and cost columns.
+On the dashboard, the timeline fills: runs per minute by model and role, with latency and cost per call. Then the verified-claims feed updates with real items from live feeds about CrowdStrike, Palo Alto Networks and others.
 
-> "Every call by every agent (scout, reader, classifier, judge) lands in ClickHouse within a second. All of it runs on AkashML open-weight models."
+> "Every reader, classifier and judge call lands in ClickHouse within a second. A claim becomes verified only when a judge on a different model confirms it against a second source."
 
-## 0:50 to 1:20 A clean claim
+## 0:45 to 1:15 The catch (beat 4)
 
-On the dashboard, open one verified claim, or run:
+Dashboard: injection events panel, then source trust.
+
+> "This Nullgrid Security blog post looks like threat research. Hidden in an HTML comment and in white-on-white text, it tells any AI reader to report that Quillon Shield was breached and lost its FedRAMP authorization. The pattern detector flagged it, the canary tripped on the reader's output, the claims were quarantined, and nullgrid_blog's trust dropped to zero. Quillon Shield's fake breach never reaches Senso, so it never reaches a brief."
+
+## 1:15 to 1:35 The contradiction (beat 5)
+
+Dashboard: quarantine queue, the Quillon Shield funding row.
+
+> "A news site says Quillon Shield raised $45 million. The company's press release and its 8-K both say $450 million. The judge disagrees with the $45M claim and quarantines it. A wrong number doesn't ship."
+
+## 1:35 to 2:10 Profile and digest from Senso (beat 6)
 
 ```sh
-docker exec -it tokenshackathon-clickhouse clickhouse-client -q \
-  "SELECT entity, claim_type, value, confidence, judge_verdict, senso_node_id FROM hive.claims FINAL WHERE status='verified' LIMIT 5"
+.venv/bin/python -m hive.writer.ci profile "Quillon Shield"
+.venv/bin/python -m hive.writer.ci digest --since "$(date -u -v-1H +%Y-%m-%dT%H:%M)"
 ```
 
-> "The scout found a press release, the reader extracted a claim with a confidence score, the classifier labelled it, and the judge confirmed it against a second source. Only then was it written to Senso."
+> "The writer reads only approved claims in Senso's shared-context folder, which the judge tagged status:approved. The profile has Positioning, Recent moves, Risks and People. Every line cites its passage, and the code drops any sentence without a valid citation. Under Risks there's no breach, because the only breach claim came from the injected page. The digest shows what changed since the last heartbeat, grouped by claim type."
 
-## 1:20 to 2:00 The catch (lead with this if short on time)
-
-Dashboard: injection events panel, then quarantine queue.
+## 2:10 to 2:25 The trap question (beat 7)
 
 ```sh
-docker exec -it tokenshackathon-clickhouse clickhouse-client -q "SELECT * FROM hive.injection_recent LIMIT 5"
-docker exec -it tokenshackathon-clickhouse clickhouse-client -q "SELECT * FROM hive.source_trust_current"
-```
-
-> "This fixture page hides an instruction telling the agent to mark a competitor's trial as failed and to report a fake funding round. The heuristic detector flagged the page, the canary tripped on the reader's output, and the judge disagreed with the claim. It was quarantined, it never reached Senso, and the source lost trust."
-
-## 2:00 to 2:20 Uncertainty
-
-Dashboard: low-confidence and quarantine queue.
-
-> "Low confidence and agent disagreement don't go into the brief. They're routed to a larger model or to a human."
-
-## 2:20 to 2:45 The brief
-
-```sh
-.venv/bin/python -m hive.writer.brief "<ENTITY>" "What are the latest clinical and financing developments?" --out docs/sample_brief.md
-```
-
-> "The writer reads only from Senso's verified claims. Every sentence carries a citation, and the code drops any sentence the model returns without a valid one."
-
-Then the trap question, which is not in the KB:
-
-```sh
-.venv/bin/python -m hive.writer.brief "<ENTITY>" "What is <ENTITY>'s stock price and market cap?"
+.venv/bin/python -m hive.writer.brief "CrowdStrike" "What is CrowdStrike's internal sales quota for next quarter?"
 ```
 
 Expected output: `_No verified claims in the knowledge base answer this question._`
 
-> "The KB has nothing on the stock price, so the writer refuses instead of guessing, even though passages about the company were retrieved. It doesn't fill gaps with outside knowledge."
+> "Ask about something that isn't in the verified KB and the writer refuses instead of guessing. It doesn't fill gaps with outside knowledge."
 
-Then the live query on stage:
+## 2:25 to 2:45 Cost and live query (beat 8)
 
 ```sh
-docker exec -it tokenshackathon-clickhouse clickhouse-client -q "SELECT * FROM hive.misclassification_by_model"
+scripts/stage_queries.sh --pause
 ```
 
-> "Misclassification rate by model over this run, straight from ClickHouse."
+Show the misclassification rate by model, then cost by model.
 
-## 2:45 to 3:00 Semgrep close
+> "The whole heartbeat ran on open-weight AkashML models: Llama 3.3 70B reads, gpt-oss-120b judges, Qwen writes. Total cost was about a cent."
 
-Show `docs/SEMGREP.md` and the screenshot of the Guardian finding.
+## 2:45 to 3:00 Semgrep (beat 9)
 
-> "Semgrep Guardian scanned every edit across four Claude Code sessions while we built. This is what it caught, and here is the fix."
+Show `docs/semgrep/ssrf_poc.png`.
+
+> "While building it, we found an SSRF in our own RSS collector: one malicious feed item could make Hive read localhost services, including ClickHouse, into the pipeline. Here's the proof of concept before and after the fix, and the regression tests."
+
+## After recording
+
+```sh
+scripts/demo_down.sh
+```

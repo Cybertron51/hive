@@ -68,15 +68,15 @@ fixture:
   - name: Nullgrid Security
     segments: [XDR, EDR, MDR]
     aliases: [Nullgrid, Nullgrid Sentinel XDR, Sentinel XDR]
-  - name: Obsidian Gate
+  - name: Quillon Shield
     segments: [SASE, zero trust, ZTNA]
-    aliases: [Obsidian Gate Inc, GateEdge]
-  - name: Lattice Defense
+    aliases: [Quillon Shield Inc, GateEdge]
+  - name: Veyrn Defense
     segments: [CNAPP, CSPM, cloud workload protection]
-    aliases: [Lattice Defense Inc, Lattice CloudGuard]
+    aliases: [Veyrn Defense Inc, Veyrn CloudGuard]
   - name: Kestrel Identity
     segments: [identity, IAM, ITDR]
     aliases: [Kestrel Identity Inc, Kestrel ID, Kestrel Verify]
-  - name: Harbor Cloud Security
+  - name: Cindral Cloud Security
     segments: [SIEM, data security, DSPM]
-    aliases: [Harbor Cloud, Harbor Cloud Security Inc, Harbor SIEM]
+    aliases: [Cindral Cloud, Cindral Cloud Security Inc, Cindral SIEM]

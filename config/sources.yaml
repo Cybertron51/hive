@@ -1,5 +1,5 @@
 # Hive sources. kind: fixture | page | rss | edgar. tier: fixture (fictional) | live (real public data).
-# Fixture vendors are FICTIONAL (Nullgrid Security, Obsidian Gate, Lattice Defense, Kestrel Identity, Harbor Cloud Security).
+# Fixture vendors are FICTIONAL (Nullgrid Security, Quillon Shield, Veyrn Defense, Kestrel Identity, Cindral Cloud Security).
 # Live sources are real feeds/filings and are never seeded with fabricated claims. Set enabled: false to skip a source.
 # Feeds verified returning items on 2026-10-09. Dropped: Okta security blog (https://sec.okta.com/feed -> 404).
 # EDGAR: submissions API by CIK, latest 8-K/10-Q per company (8-K includes Exhibit 99.x). Wiz has no CIK (private).
@@ -26,50 +26,50 @@ sources:
   tier: fixture
   entities:
   - Nullgrid Security
-  - Obsidian Gate
+  - Quillon Shield
   - Kestrel Identity
-- source_id: obsidiangate_newsroom
+- source_id: quillon_newsroom
   kind: fixture
-  path: fixtures/obsidiangate_press_release.html
-  url: https://obsidiangate.example/news/private-placement
+  path: fixtures/quillon_press_release.html
+  url: https://quillonshield.example/news/private-placement
   tier: fixture
   entities:
-  - Obsidian Gate
-- source_id: obsidiangate_newsroom
+  - Quillon Shield
+- source_id: quillon_newsroom
   kind: fixture
-  path: fixtures/obsidiangate_fedramp.html
-  url: https://obsidiangate.example/news/fedramp-high
+  path: fixtures/quillon_fedramp.html
+  url: https://quillonshield.example/news/fedramp-high
   tier: fixture
   entities:
-  - Obsidian Gate
+  - Quillon Shield
 - source_id: cyber_ledger
   kind: fixture
-  path: fixtures/obsidiangate_funding_news.html
-  url: https://cyber-ledger.example/2026/09/obsidian-gate-raises-45m
+  path: fixtures/quillon_funding_news.html
+  url: https://cyber-ledger.example/2026/09/quillon-shield-raises-45m
   tier: fixture
   entities:
-  - Obsidian Gate
+  - Quillon Shield
 - source_id: edgar_mirror
   kind: fixture
-  path: fixtures/obsidiangate_8k.html
-  url: https://edgar-mirror.example/obsidiangate/8-k-2026-09-24
+  path: fixtures/quillon_8k.html
+  url: https://edgar-mirror.example/quillon/8-k-2026-09-24
   tier: fixture
   entities:
-  - Obsidian Gate
+  - Quillon Shield
 - source_id: edgar_mirror
   kind: fixture
-  path: fixtures/lattice_earnings_8k.html
-  url: https://edgar-mirror.example/lattice/8-k-2026-09-03
+  path: fixtures/veyrn_earnings_8k.html
+  url: https://edgar-mirror.example/veyrn/8-k-2026-09-03
   tier: fixture
   entities:
-  - Lattice Defense
-- source_id: lattice_newsroom
+  - Veyrn Defense
+- source_id: veyrn_newsroom
   kind: fixture
-  path: fixtures/lattice_acquisition_pr.html
-  url: https://latticedefense.example/news/quillfeather
+  path: fixtures/veyrn_acquisition_pr.html
+  url: https://veyrndefense.example/news/fernhollow
   tier: fixture
   entities:
-  - Lattice Defense
+  - Veyrn Defense
 - source_id: kestrel_newsroom
   kind: fixture
   path: fixtures/kestrel_breach_disclosure.html
@@ -84,32 +84,32 @@ sources:
   tier: fixture
   entities:
   - Kestrel Identity
-- source_id: harbor_newsroom
+- source_id: cindral_newsroom
   kind: fixture
-  path: fixtures/harbor_partnership_pr.html
-  url: https://harborcloud.example/news/kestrel-partnership
+  path: fixtures/cindral_partnership_pr.html
+  url: https://cindralcloud.example/news/kestrel-partnership
   tier: fixture
   entities:
-  - Harbor Cloud Security
+  - Cindral Cloud Security
   - Kestrel Identity
-- source_id: harbor_blog
+- source_id: cindral_blog
   kind: fixture
-  path: fixtures/harbor_pricing_soc2_blog.html
-  url: https://harborcloud.example/blog/pricing-soc2
+  path: fixtures/cindral_pricing_soc2_blog.html
+  url: https://cindralcloud.example/blog/pricing-soc2
   tier: fixture
   entities:
-  - Harbor Cloud Security
+  - Cindral Cloud Security
 - source_id: cyber_ledger
   kind: fixture
   path: fixtures/weekly_roundup_news.html
   url: https://cyber-ledger.example/2026/09/week-in-review
   tier: fixture
   entities:
-  - Obsidian Gate
-  - Lattice Defense
+  - Quillon Shield
+  - Veyrn Defense
   - Kestrel Identity
   - Nullgrid Security
-  - Harbor Cloud Security
+  - Cindral Cloud Security
 - source_id: thehackernews
   kind: rss
   url: https://feeds.feedburner.com/TheHackersNews

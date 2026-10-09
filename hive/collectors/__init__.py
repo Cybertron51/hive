@@ -8,6 +8,7 @@ import yaml
 
 from hive.collectors import edgar, fixtures, page, rss
 from hive.collectors._common import ROOT
+from hive.collectors.entities import entity_hints
 from hive.models import RawDocument
 
 log = logging.getLogger(__name__)
@@ -44,4 +45,10 @@ async def _safe_collect(source: dict) -> list[RawDocument]:
 async def collect_all(sources_path: str | Path = "config/sources.yaml", kinds: set[str] | None = None) -> list[RawDocument]:
     sources = [s for s in load_sources(sources_path) if kinds is None or s.get("kind") in kinds]
     results = await asyncio.gather(*(_safe_collect(s) for s in sources))
-    return [doc for docs in results for doc in docs]
+    docs = [doc for batch in results for doc in batch]
+    for doc in docs:
+        try:
+            doc.entities = entity_hints(doc, sources_path)
+        except Exception as e:
+            log.warning("entity hints failed for %s: %s", doc.url, e)
+    return docs

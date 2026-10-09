@@ -16,11 +16,11 @@ from hive.models import RawDocument
 ROOT = Path(__file__).resolve().parents[1]
 SOURCES = ROOT / "config/sources.yaml"
 FIXTURE_SOURCE_IDS = {
-    "nullgrid_newsroom", "nullgrid_blog", "obsidiangate_newsroom", "cyber_ledger", "edgar_mirror",
-    "lattice_newsroom", "kestrel_newsroom", "kestrel_advisories", "harbor_newsroom", "harbor_blog",
+    "nullgrid_newsroom", "nullgrid_blog", "quillon_newsroom", "cyber_ledger", "edgar_mirror",
+    "veyrn_newsroom", "kestrel_newsroom", "kestrel_advisories", "cindral_newsroom", "cindral_blog",
 }
 LIVE_NAMES = {"CrowdStrike", "Palo Alto Networks", "SentinelOne", "Zscaler", "Fortinet", "Okta", "Wiz", "Cloudflare", "Datadog", "Rapid7"}
-FICTIONAL_NAMES = {"Nullgrid Security", "Obsidian Gate", "Lattice Defense", "Kestrel Identity", "Harbor Cloud Security"}
+FICTIONAL_NAMES = {"Nullgrid Security", "Quillon Shield", "Veyrn Defense", "Kestrel Identity", "Cindral Cloud Security"}
 network = pytest.mark.skipif(not os.environ.get("HIVE_NETWORK_TESTS"), reason="set HIVE_NETWORK_TESTS=1 for live feeds")
 
 
@@ -53,7 +53,7 @@ def test_injection_fixture_reaches_reader(fixture_docs):
     blog = next(d for d in fixture_docs if d.source_id == "nullgrid_blog")
     assert "Ignore all previous instructions" in blog.text
     assert "disregard your prior instructions" in blog.text
-    assert "FedRAMP authorization" in blog.text and "Obsidian Gate" in blog.text
+    assert "FedRAMP authorization" in blog.text and "Quillon Shield" in blog.text
 
 
 def test_fixture_collector_returns_all_fixtures(fixture_docs):
@@ -63,17 +63,17 @@ def test_fixture_collector_returns_all_fixtures(fixture_docs):
     assert all(d.published_at is not None for d in fixture_docs)
 
 
-def test_obsidian_gate_conflict_docs(fixture_docs):
+def test_quillon_shield_conflict_docs(fixture_docs):
     by_path = {Path(s["path"]).name: s for s in load_sources(SOURCES) if s["kind"] == "fixture"}
     by_url = {d.url: d for d in fixture_docs}
     for name, amount in (
-        ("obsidiangate_funding_news.html", "$45 million"),
-        ("obsidiangate_press_release.html", "$450 million"),
-        ("obsidiangate_8k.html", "$450.0 million"),
+        ("quillon_funding_news.html", "$45 million"),
+        ("quillon_press_release.html", "$450 million"),
+        ("quillon_8k.html", "$450.0 million"),
     ):
         doc = by_url[by_path[name]["url"]]
         assert amount in doc.text
-        assert "Obsidian Gate" in entity_hints(doc, SOURCES)
+        assert "Quillon Shield" in entity_hints(doc, SOURCES)
 
 
 def test_fixtures_never_mention_live_vendors(fixture_docs):
@@ -179,7 +179,7 @@ def test_fixture_symlink_escape_rejected(tmp_path):
 
 
 def test_fixture_path_accepts_both_forms():
-    assert resolve_fixture("fixtures/obsidiangate_8k.html") == resolve_fixture("obsidiangate_8k.html") == (FIXTURES_DIR / "obsidiangate_8k.html").resolve()
+    assert resolve_fixture("fixtures/quillon_8k.html") == resolve_fixture("quillon_8k.html") == (FIXTURES_DIR / "quillon_8k.html").resolve()
 
 
 @pytest.mark.parametrize("url", [
@@ -276,3 +276,11 @@ async def test_page_redirect_to_internal_blocked(internal_server, monkeypatch):
     with pytest.raises(UnsafeURLError):
         await page.collect({"source_id": "evil_page", "url": f"{base}/redirect"})
     assert "/internal" not in hits
+
+
+def test_collect_all_populates_entities(fixture_docs):
+    by_source = {d.source_id: d for d in fixture_docs}
+    assert by_source["quillon_newsroom"].entities[0] == "Quillon Shield"
+    assert set(by_source["nullgrid_blog"].entities) >= {"Nullgrid Security", "Quillon Shield", "Kestrel Identity"}
+    assert all(d.entities for d in fixture_docs)
+    assert not any(set(d.entities) & LIVE_NAMES for d in fixture_docs)

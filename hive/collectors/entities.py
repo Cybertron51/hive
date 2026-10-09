@@ -60,7 +60,8 @@ def _source_hints(sources_path: str) -> dict[str, list[str]]:
 
 def entity_hints(doc: RawDocument, sources_path: str | Path = ROOT / "config" / "sources.yaml") -> list[str]:
     """Canonical entity names: source-level hints from sources.yaml plus alias matches in title/text."""
-    src = _source_hints(str(sources_path))
+    path = Path(sources_path)
+    src = _source_hints(str(path if path.is_absolute() else ROOT / path))
     out = list(src.get(doc.url) or src.get(doc.source_id) or [])
     for name in match_entities(f"{doc.title}\n{doc.text}"):
         if name not in out:
