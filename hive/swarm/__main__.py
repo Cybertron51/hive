@@ -5,6 +5,7 @@ import asyncio
 import inspect
 import sys
 from collections import Counter
+from datetime import datetime, timezone
 from html.parser import HTMLParser
 from pathlib import Path
 
@@ -115,6 +116,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--concurrency", type=int, default=8)
     ap.add_argument("--dry-run", action="store_true", help="use FakeLLM, sample docs, no Senso ingest")
     ap.add_argument("--log", action="store_true", help="write telemetry even in --dry-run")
+    ap.add_argument("--brief", action="store_true", help="write cited competitor profiles and a heartbeat digest to docs/briefs/")
     args = ap.parse_args(argv)
 
     if args.dry_run:
@@ -127,12 +129,39 @@ def main(argv: list[str] | None = None) -> int:
     if not docs:
         print("no documents to process", file=sys.stderr)
         return 1
-    result = asyncio.run(run_swarm(
-        docs, concurrency=args.concurrency, telemetry=args.log or not args.dry_run, ingest=not args.dry_run,
-    ))
-    print(summarize(docs, result))
+    async def run() -> SwarmResult:
+        started = datetime.now(timezone.utc)
+        result = await run_swarm(
+            docs, concurrency=args.concurrency, telemetry=args.log or not args.dry_run, ingest=not args.dry_run,
+        )
+        print(summarize(docs, result))
+        if args.brief:
+            await write_briefs(result, started, log=args.log or not args.dry_run)
+        return result
+
+    asyncio.run(run())
     return 0
 
+
+async def write_briefs(result: SwarmResult, since: datetime, log: bool) -> None:
+    from hive.writer.ci import digest, save, write_profiles_for
+
+    briefs = [(f"profile-{b.entity}", b) for b in await write_profiles_for(result)]
+    if not briefs:
+        print("briefs: no verified claims")
+        return
+    briefs.append((f"digest-{since:%Y%m%dT%H%M}", await digest(since, swarm_id=result.swarm_id)))
+    for name, b in briefs:
+        path = save(b, name)
+        print(f"brief {name}: {path} status={b.run.status.value} citations={len(b.citations)} dropped={b.dropped_sentences}")
+    if log:
+        try:
+            from hive import telemetry
+            for _, b in briefs:
+                telemetry.log_run(b.run)
+            telemetry.flush()
+        except Exception as exc:
+            print(f"brief telemetry failed: {type(exc).__name__}: {exc}", file=sys.stderr)
 
 if __name__ == "__main__":
     raise SystemExit(main())

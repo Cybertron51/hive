@@ -9,9 +9,11 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import re
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -19,10 +21,15 @@ import httpx
 from pydantic import BaseModel
 
 from hive.config import settings
-from hive.models import Claim, new_id
+from hive.models import Claim, ClaimStatus, new_id
 
-SOURCE_RE = re.compile(r"^Source:\s*(\S+)", re.MULTILINE)
+log = logging.getLogger(__name__)
+
+META_RE = re.compile(r"^(Entity|Claim type|Value|Source|Confidence|Claim ID|Decided|Status):[ \t]*(.*)$", re.MULTILINE)
 LOCAL_KB_PATH = Path("data/kb.json")
+FOLDER = "shared-context"
+OWNER = "hive-judge"
+MAX_TAG = 64
 
 
 class SensoError(RuntimeError):
@@ -40,32 +47,81 @@ class Passage(BaseModel):
     node_id: str = ""
     content_id: str = ""
     score: float = 0.0
+    entity: str = ""
+    claim_type: str = ""
+    status: str = ""
+    decided: datetime | None = None
+
+
+def _one_line(v: object) -> str:
+    """Claim fields come from LLM output over scraped pages; flatten them so they cannot forge a metadata line."""
+    return " ".join(str(v).split())
+
+
+def kb_status(claim: Claim) -> str:
+    return "approved" if claim.status == ClaimStatus.VERIFIED else "draft"
+
+
+def claim_tags(claim: Claim) -> list[str]:
+    tags = [
+        f"status:{kb_status(claim)}",
+        f"owner:{OWNER}",
+        f"decided:{claim.created_at:%Y-%m-%d}",
+        f"entity:{_one_line(claim.entity)}",
+        f"claim_type:{_one_line(claim.claim_type)}",
+    ]
+    return [t.replace(",", " ")[:MAX_TAG] for t in tags]
 
 
 def claim_title(claim: Claim) -> str:
-    return f"{claim.entity} | {claim.claim_type} | {claim.claim_id[:8]}"
+    return f"[{kb_status(claim)}] {_one_line(claim.entity)} | {_one_line(claim.claim_type)} | {claim.claim_id[:8]}"[:200]
 
 
 def claim_text(claim: Claim) -> str:
-    lines = [
-        claim.text.strip(),
-        "",
-        f"Entity: {claim.entity}",
-        f"Claim type: {claim.claim_type}",
-    ]
+    """Untrusted text first, then metadata lines. Status is last and parsed last-wins."""
+    lines = [_one_line(claim.text), "", f"Entity: {_one_line(claim.entity)}", f"Claim type: {_one_line(claim.claim_type)}"]
     if claim.value:
-        lines.append(f"Value: {claim.value}")
+        lines.append(f"Value: {_one_line(claim.value)}")
     lines += [
-        f"Source: {claim.source_id}",
+        f"Source: {_one_line(claim.source_id)}",
         f"Confidence: {claim.confidence:.2f}",
         f"Claim ID: {claim.claim_id}",
+        f"Decided: {claim.created_at.isoformat()}",
+        f"Status: {kb_status(claim)}",
     ]
     return "\n".join(lines)
 
 
-def _source_url(text: str) -> str:
-    m = SOURCE_RE.search(text)
-    return m.group(1) if m else ""
+def parse_meta(text: str) -> dict[str, str]:
+    meta: dict[str, str] = {}
+    for key, value in META_RE.findall(text):
+        meta[key] = value.strip()
+    return meta
+
+
+def _passage(text: str, **kw: Any) -> Passage:
+    meta = parse_meta(text)
+    decided = None
+    if meta.get("Decided"):
+        try:
+            decided = datetime.fromisoformat(meta["Decided"])
+        except ValueError:
+            decided = None
+    src = meta.get("Source", "")
+    return Passage(
+        text=text,
+        source_url=src.split()[0] if src else "",
+        entity=meta.get("Entity", ""),
+        claim_type=meta.get("Claim type", ""),
+        status=meta.get("Status", ""),
+        decided=decided,
+        **kw,
+    )
+
+
+def approved(passages: list[Passage]) -> list[Passage]:
+    """Only passages whose own metadata says approved; a chunk that lost its metadata is dropped."""
+    return [p for p in passages if p.status == "approved"]
 
 
 class KnowledgeBase(Protocol):
@@ -73,7 +129,7 @@ class KnowledgeBase(Protocol):
     async def ingest_claim(self, claim: Claim, source_url: str = "") -> str: ...
     async def wait_processed(self, node_id: str, timeout: float = 60) -> bool: ...
     async def search(self, query: str) -> dict[str, Any]: ...
-    async def context(self, query: str) -> list[Passage]: ...
+    async def context(self, query: str, max_results: int = 20, approved_only: bool = True) -> list[Passage]: ...
 
 
 class SensoKB:
@@ -85,13 +141,18 @@ class SensoKB:
             headers={"X-API-Key": api_key, "Content-Type": "application/json"},
             timeout=timeout,
         )
+        self._folder_id = ""
+        self._folder_lock = asyncio.Lock()
+        self._pending_tags: dict[str, list[str]] = {}
 
     async def aclose(self) -> None:
         await self._http.aclose()
 
-    async def _request(self, method: str, path: str, json_body: dict[str, Any] | None = None) -> httpx.Response:
+    async def _request(
+        self, method: str, path: str, json_body: dict[str, Any] | None = None, params: dict[str, Any] | None = None
+    ) -> httpx.Response:
         try:
-            resp = await self._http.request(method, path, json=json_body)
+            resp = await self._http.request(method, path, json=json_body, params=params)
         except httpx.HTTPError as e:
             raise SensoError(f"{method} {path} failed: {type(e).__name__}") from e
         if resp.status_code == 402:
@@ -115,17 +176,45 @@ class SensoKB:
     async def me(self) -> dict[str, Any]:
         return self._json(await self._request("GET", "/org/me"), "me")
 
+    async def folder_id(self) -> str:
+        async with self._folder_lock:
+            if self._folder_id:
+                return self._folder_id
+            data = self._json(
+                await self._request("GET", "/org/kb/find", params={"q": FOLDER, "type": "folder", "limit": 50}), "find folder"
+            )
+            for node in data.get("nodes") or []:
+                if node.get("name") == FOLDER:
+                    self._folder_id = node.get("kb_node_id") or node.get("id") or ""
+                    break
+            if not self._folder_id:
+                created = self._json(await self._request("POST", "/org/kb/folders", {"name": FOLDER}), "create folder")
+                self._folder_id = created.get("kb_node_id") or created.get("id") or ""
+            if not self._folder_id:
+                raise SensoError(f"could not find or create folder {FOLDER!r}")
+            return self._folder_id
+
+    async def set_tags(self, node_id: str, tags: list[str]) -> None:
+        resp = await self._request("PUT", f"/org/kb/nodes/{node_id}/tags", {"tag_names": tags})
+        if resp.status_code >= 400:
+            log.warning("senso tags on %s failed: HTTP %s %s", node_id, resp.status_code, resp.text[:200])
+
     async def ingest_claim(self, claim: Claim, source_url: str = "") -> str:
-        """Returns the kb_node_id, or "" if Senso already holds identical text (409)."""
+        """Writes the claim into the shared-context folder and tags it. Returns the kb_node_id,
+        or "" if Senso already holds identical text (409)."""
         if source_url:
             claim = claim.model_copy(update={"source_id": source_url})
-        resp = await self._request("POST", "/org/kb/raw", {"title": claim_title(claim), "text": claim_text(claim)})
+        body = {"title": claim_title(claim), "text": claim_text(claim), "kb_folder_node_id": await self.folder_id()}
+        resp = await self._request("POST", "/org/kb/raw", body)
         if resp.status_code == 409:
             return ""
         data = self._json(resp, "ingest_claim")
         node_id = data.get("kb_node_id") or ""
         if not node_id:
             raise SensoError("ingest_claim: response missing kb_node_id")
+        tags = claim_tags(claim)
+        self._pending_tags[node_id] = tags
+        await self.set_tags(node_id, tags)
         return node_id
 
     async def node_status(self, node_id: str) -> str:
@@ -140,6 +229,9 @@ class SensoKB:
         while True:
             status = await self.node_status(node_id)
             if status == "complete":
+                tags = self._pending_tags.pop(node_id, None)
+                if tags:
+                    await self.set_tags(node_id, tags)
                 return True
             if status == "failed":
                 raise SensoError(f"Senso failed to process node {node_id}")
@@ -150,24 +242,21 @@ class SensoKB:
     async def search(self, query: str) -> dict[str, Any]:
         return self._json(await self._request("POST", "/org/search", {"query": query}), "search")
 
-    async def context(self, query: str) -> list[Passage]:
-        data = self._json(await self._request("POST", "/org/search/context", {"query": query}), "context")
-        passages = []
-        for r in data.get("results") or []:
-            text = r.get("chunk_text") or ""
-            if not text:
-                continue
-            passages.append(
-                Passage(
-                    text=text,
-                    title=r.get("title") or "",
-                    source_url=_source_url(text),
-                    node_id=r.get("kb_node_id") or "",
-                    content_id=r.get("content_id") or "",
-                    score=float(r.get("score") or 0.0),
-                )
+    async def context(self, query: str, max_results: int = 20, approved_only: bool = True) -> list[Passage]:
+        body = {"query": query, "max_results": max(1, min(max_results, 20))}
+        data = self._json(await self._request("POST", "/org/search/context", body), "context")
+        passages = [
+            _passage(
+                r["chunk_text"],
+                title=r.get("title") or "",
+                node_id=r.get("kb_node_id") or "",
+                content_id=r.get("content_id") or "",
+                score=float(r.get("score") or 0.0),
             )
-        return passages
+            for r in data.get("results") or []
+            if r.get("chunk_text")
+        ]
+        return approved(passages) if approved_only else passages
 
 
 class LocalKB:
@@ -205,7 +294,7 @@ class LocalKB:
             if any(n["text"] == text for n in nodes):
                 return ""
             node_id = new_id()
-            nodes.append({"kb_node_id": node_id, "title": claim_title(claim), "text": text})
+            nodes.append({"kb_node_id": node_id, "title": claim_title(claim), "text": text, "folder": FOLDER, "tags": claim_tags(claim)})
             self._save(nodes)
         return node_id
 
@@ -216,7 +305,7 @@ class LocalKB:
     def _tokens(s: str) -> set[str]:
         return {t for t in re.findall(r"[a-z0-9]+", s.lower()) if len(t) > 2}
 
-    async def context(self, query: str) -> list[Passage]:
+    async def context(self, query: str, max_results: int = 20, approved_only: bool = True) -> list[Passage]:
         q = self._tokens(query)
         scored = []
         for n in self._load():
@@ -224,10 +313,10 @@ class LocalKB:
             if overlap:
                 scored.append((overlap / max(len(q), 1), n))
         scored.sort(key=lambda x: x[0], reverse=True)
-        return [
-            Passage(text=n["text"], title=n["title"], source_url=_source_url(n["text"]), node_id=n["kb_node_id"], score=s)
-            for s, n in scored[: self.max_results]
-        ]
+        passages = [_passage(n["text"], title=n["title"], node_id=n["kb_node_id"], score=s) for s, n in scored]
+        if approved_only:
+            passages = approved(passages)
+        return passages[: min(max_results, self.max_results)]
 
     async def search(self, query: str) -> dict[str, Any]:
         passages = await self.context(query)

@@ -16,6 +16,7 @@ _HIDDEN_STYLE = re.compile(
     r"|left\s*:\s*-\d{3,}px|text-indent\s*:\s*-\d{3,}px|height\s*:\s*0|width\s*:\s*0",
     re.IGNORECASE,
 )
+_XML_DECL = re.compile(r"^\s*<\?xml[^>]*\?>", re.IGNORECASE)
 _WS = re.compile(r"[ \t\r\f\v]+")
 _BLANKS = re.compile(r"\n\s*\n+")
 _BLOCK_TAGS = {"p", "div", "li", "h1", "h2", "h3", "h4", "h5", "h6", "tr", "br", "section", "article", "blockquote", "pre", "table"}
@@ -79,6 +80,7 @@ def _hidden_texts(root) -> list[str]:
 def html_to_text(html: str) -> tuple[str, str]:
     if not html or not html.strip():
         return "", ""
+    html = _XML_DECL.sub("", html, count=1)
     root = lxml.html.document_fromstring(html, parser=HTML_PARSER)
 
     title = ""

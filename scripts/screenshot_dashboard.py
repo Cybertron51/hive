@@ -48,7 +48,10 @@ def main() -> None:
     ap.add_argument("output", nargs="?", default="docs/screenshots/dashboard.png")
     ap.add_argument("--url", default="http://localhost:8080/")
     ap.add_argument("--width", type=int, default=1400)
+    ap.add_argument("--all-swarms", action="store_true", help="turn the latest-swarm-only filter off")
     args = ap.parse_args()
+    if args.all_swarms:
+        args.url += ("&" if "?" in args.url else "?") + "latest=0"
 
     chrome = find_chrome()
     height = page_height(chrome, args.url, args.width)

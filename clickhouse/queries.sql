@@ -82,13 +82,15 @@ GROUP BY swarm_id;
 
 CREATE OR REPLACE VIEW hive.misclassification_by_model AS
 SELECT
-    swarm_id,
-    model,
-    countIf(judge_verdict != 'na') AS judged,
-    countIf(judge_verdict = 'disagree') AS disagreed,
+    r.swarm_id AS swarm_id,
+    r.model AS model,
+    countIf(c.judge_verdict != 'na') AS judged,
+    countIf(c.judge_verdict = 'disagree') AS disagreed,
     round(disagreed / nullIf(judged, 0), 3) AS disagree_rate
-FROM hive.agent_runs
-GROUP BY swarm_id, model
+FROM hive.claims AS c FINAL
+INNER JOIN (SELECT run_id, any(swarm_id) AS swarm_id, any(model) AS model FROM hive.agent_runs GROUP BY run_id) AS r ON c.run_id = r.run_id
+GROUP BY r.swarm_id, r.model
+HAVING judged > 0
 ORDER BY disagree_rate DESC;
 
 CREATE OR REPLACE VIEW hive.cost_by_model AS
@@ -120,3 +122,40 @@ FROM hive.agent_runs
 WHERE swarm_id = (SELECT swarm_id FROM hive.latest_swarm)
 GROUP BY bucket
 ORDER BY bucket WITH FILL STEP INTERVAL 10 SECOND;
+
+CREATE OR REPLACE VIEW hive.heartbeats_recent AS
+SELECT *
+FROM hive.heartbeats
+ORDER BY ts DESC
+LIMIT 100;
+
+CREATE OR REPLACE VIEW hive.verified_claims_feed AS
+SELECT
+    r.swarm_id AS swarm_id,
+    c.created_at AS created_at,
+    c.claim_id AS claim_id,
+    c.entity AS entity,
+    c.claim_type AS claim_type,
+    c.value AS value,
+    c.text AS text,
+    c.source_id AS source_id,
+    c.confidence AS confidence,
+    c.senso_node_id AS senso_node_id
+FROM hive.claims AS c FINAL
+LEFT JOIN (SELECT run_id, any(swarm_id) AS swarm_id FROM hive.agent_runs GROUP BY run_id) AS r ON c.run_id = r.run_id
+WHERE c.status = 'verified'
+ORDER BY c.created_at DESC
+LIMIT 500;
+
+CREATE OR REPLACE VIEW hive.claims_by_entity AS
+SELECT
+    r.swarm_id AS swarm_id,
+    c.entity AS entity,
+    countIf(c.status = 'verified') AS verified,
+    countIf(c.status = 'quarantined') AS quarantined,
+    count() AS total,
+    round(avg(c.confidence), 3) AS avg_confidence
+FROM hive.claims AS c FINAL
+LEFT JOIN (SELECT run_id, any(swarm_id) AS swarm_id FROM hive.agent_runs GROUP BY run_id) AS r ON c.run_id = r.run_id
+GROUP BY r.swarm_id, c.entity
+ORDER BY verified DESC, total DESC;

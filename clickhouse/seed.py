@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import random
 from datetime import timedelta
+from uuid import uuid4
 
 from hive import telemetry
 from hive.models import (
@@ -84,7 +85,7 @@ def seed_claims(runs: list[AgentRun]) -> list[Claim]:
         created = t0 - timedelta(minutes=i * 3 + 2)
         base = dict(
             run_id=run.run_id, doc_id=run.doc_id, source_id=run.source_id, entity=e,
-            claim_type=ct, text=tx, confidence=cf, created_at=created,
+            claim_type=ct, text=tx, value=VALUES[e], confidence=cf, created_at=created,
         )
         claim = Claim(**base, status=ClaimStatus.PENDING, updated_at=created)
         out.append(claim)
@@ -114,6 +115,27 @@ def seed_injections(swarm: str) -> list[InjectionEvent]:
     ]
 
 
+VALUES = {
+    "Acme Corp": "$40M Series B", "CVE-2026-1111": "libfoo 2.3 RCE", "Globex": "customer data leak",
+    "Initech": "agent platform", "Umbrella": "acquired by Hooli", "CVE-2026-2222": "barlib auth bypass",
+    "Hooli": "denies breach", "Stark Ind": "$1B raise",
+}
+
+
+def seed_heartbeats(runs: list[AgentRun]) -> list[dict]:
+    t0 = now()
+    rows = []
+    for i in range(6):
+        rows.append({
+            "ts": t0 - timedelta(seconds=20 + i * 300), "heartbeat_id": uuid4().hex, "swarm_id": NEW_SWARM,
+            "interval_s": 300, "docs_collected": rng.randint(10, 18), "docs_new": rng.randint(0, 6),
+            "runs": rng.randint(40, 90), "claims_verified": rng.randint(2, 9), "claims_quarantined": rng.randint(0, 3),
+            "injections": rng.randint(0, 2), "cost_usd": round(rng.uniform(0.004, 0.02), 4),
+            "duration_ms": rng.randint(30000, 60000), "status": "ok" if i != 3 else "partial",
+        })
+    return rows
+
+
 def seed_trust() -> list[SourceTrust]:
     t0 = now()
     rows = [SourceTrust(source_id=s, trust=round(rng.uniform(0.7, 1.0), 2), updated_at=t0 - timedelta(hours=1)) for s in SOURCES]
@@ -137,6 +159,8 @@ def main() -> None:
         telemetry.log_injection(e)
     for t in trust:
         telemetry.upsert_trust(t)
+    for hb in seed_heartbeats(runs):
+        telemetry.log_heartbeat(hb)
     telemetry.flush()
     counts = telemetry.query(
         "SELECT (SELECT count() FROM agent_runs) AS runs, (SELECT count() FROM claims FINAL) AS claims, "

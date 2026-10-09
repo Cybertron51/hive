@@ -4,7 +4,7 @@ from typing import Any
 
 from hive import llm
 from hive.models import AgentRun, JudgeVerdict, RawDocument, Role, RunStatus
-from hive.swarm import prompts
+from hive.swarm import competitors, prompts
 from hive.swarm.injection import canary_check
 from hive.swarm.pricing import cost_usd, small_model, large_model
 
@@ -71,11 +71,27 @@ def _clean_claims(data: dict) -> list[dict]:
     return out
 
 
+def _hints(doc: RawDocument) -> tuple[list[str], dict[str, list[str]]]:
+    extra = doc.model_extra or {}
+    entities = getattr(doc, "entities", None) or extra.get("entities") or []
+    aliases = getattr(doc, "aliases", None) or extra.get("aliases") or {}
+    entities = [str(e) for e in entities] if isinstance(entities, (list, tuple)) else []
+    if isinstance(aliases, dict):
+        aliases = {str(k): [str(a) for a in (v if isinstance(v, (list, tuple)) else [v])] for k, v in aliases.items()}
+    else:
+        aliases = {}
+    tracked = competitors.names()
+    entities = list(dict.fromkeys([*entities, *tracked]))
+    aliases = {**competitors.aliases(), **aliases}
+    return entities, aliases
+
+
 async def run_reader(doc: RawDocument, swarm_id: str, model: str | None = None) -> tuple[AgentRun, dict]:
-    run, data = await _call(Role.READER, model or small_model(), prompts.reader_user(doc.title, doc.url, doc.text), swarm_id, doc)
+    user = prompts.reader_user(doc.title, doc.url, doc.text, *_hints(doc))
+    run, data = await _call(Role.READER, model or small_model(), user, swarm_id, doc)
     if run.status in (RunStatus.ERROR, RunStatus.MALFORMED):
         return run, {"claims": []}
-    claims = _clean_claims(data)
+    claims = competitors.normalize_claims(_clean_claims(data))
     parsed = {**data, "claims": claims}
     run.confidence = sum(c["confidence"] for c in claims) / len(claims) if claims else 0.0
     run.label = claims[0]["claim_type"] if claims else ""

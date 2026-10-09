@@ -213,12 +213,13 @@ async def _log_telemetry(result: SwarmResult) -> None:
         await _emit(lambda _: flush(), None, result)
 
 
-def _brief_inputs(result: SwarmResult, docs: dict[str, RawDocument]) -> list[dict[str, Any]]:
+def _brief_inputs(result: SwarmResult, docs: dict[str, RawDocument], tracked: dict[str, bool]) -> list[dict[str, Any]]:
     return [
         {
             "claim_id": c.claim_id, "entity": c.entity, "claim_type": c.claim_type, "text": c.text, "value": c.value,
             "confidence": c.confidence, "source_id": c.source_id, "url": docs[c.doc_id].url,
             "trust": result.trust.get(c.source_id, 1.0), "senso_node_id": c.senso_node_id,
+            "tracked": tracked.get(c.claim_id, True),
         }
         for c in result.claims if c.status == ClaimStatus.VERIFIED
     ]
@@ -235,14 +236,14 @@ async def run_swarm(
     sem = asyncio.Semaphore(max(1, concurrency))
     states = list(await asyncio.gather(*(_process_doc(d, result.swarm_id, sem, result) for d in docs)))
     await asyncio.gather(*(_reroute(s, result.swarm_id, sem, result) for s in states))
-    result.claims = list(await asyncio.gather(*(
-        _judge_claim(s, c, states, result.swarm_id, sem, result) for s in states for c in s.claims
-    )))
+    pairs = [(s, c) for s in states for c in s.claims]
+    result.claims = list(await asyncio.gather(*(_judge_claim(s, c, states, result.swarm_id, sem, result) for s, c in pairs)))
+    tracked = {claim.claim_id: bool(c.get("tracked", True)) for (_, c), claim in zip(pairs, result.claims)}
     result.trust = _trust(states, result)
     by_id = {d.doc_id: d for d in docs}
     if ingest:
         await _ingest_verified(result, {k: d.url for k, d in by_id.items()})
-    result.brief_inputs = _brief_inputs(result, by_id)
+    result.brief_inputs = _brief_inputs(result, by_id, tracked)
     if telemetry:
         await _log_telemetry(result)
     return result

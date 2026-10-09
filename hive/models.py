@@ -63,6 +63,7 @@ class RawDocument(BaseModel):
     published_at: datetime | None = None
     fetched_at: datetime = Field(default_factory=now)
     kind: str = "page"
+    entities: list[str] = Field(default_factory=list)
 
 
 class Claim(BaseModel):

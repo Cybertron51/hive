@@ -1,0 +1,82 @@
+# Tracked competitor set for Hive security CI.
+# live: real public vendors, pulled from real news, blogs and SEC filings only. Never seed claims about them.
+# fixture: FICTIONAL vendors used only in fixtures/ for the injection and contradiction demo beats.
+# aliases: matched case-sensitively on word boundaries. Tickers are matched only as "NASDAQ: X", "NYSE: X" or "$X".
+live:
+  - name: CrowdStrike
+    ticker: CRWD
+    exchange: NASDAQ
+    cik: 1535527
+    segments: [EDR, XDR, cloud security, identity protection, SIEM, threat intelligence]
+    aliases: [CrowdStrike Holdings, CrowdStrike Falcon, Falcon platform, Falcon Next-Gen SIEM, Charlotte AI, CRWD]
+  - name: Palo Alto Networks
+    ticker: PANW
+    exchange: NASDAQ
+    cik: 1327567
+    segments: [NGFW, SASE, CNAPP, XDR, SOC automation, threat intelligence]
+    aliases: [Palo Alto Networks Inc, Prisma Access, Prisma Cloud, Prisma SASE, Cortex XDR, Cortex XSIAM, Cortex Cloud, Unit 42, PANW]
+  - name: SentinelOne
+    ticker: S
+    exchange: NYSE
+    cik: 1583708
+    segments: [EDR, XDR, CNAPP, SIEM, AI security]
+    aliases: [SentinelOne Inc, Singularity Platform, Purple AI, SentinelLabs, SentinelOne Labs]
+  - name: Zscaler
+    ticker: ZS
+    exchange: NASDAQ
+    cik: 1713683
+    segments: [SASE, SSE, zero trust, ZTNA, SWG, DLP]
+    aliases: [Zscaler Inc, Zscaler Zero Trust Exchange, Zero Trust Exchange, Zscaler Internet Access, Zscaler Private Access, ThreatLabz]
+  - name: Fortinet
+    ticker: FTNT
+    exchange: NASDAQ
+    cik: 1262039
+    segments: [NGFW, SASE, SD-WAN, OT security, SIEM]
+    aliases: [Fortinet Inc, FortiGate, FortiOS, FortiGuard Labs, FortiSIEM, FortiSASE, FTNT]
+  - name: Okta
+    ticker: OKTA
+    exchange: NASDAQ
+    cik: 1660134
+    segments: [identity, IAM, CIAM, ITDR, PAM]
+    aliases: [Okta Inc, Okta Identity Cloud, Auth0, Okta Workforce Identity, OKTA]
+  - name: Wiz
+    ticker: null
+    exchange: null
+    cik: null
+    segments: [CNAPP, CSPM, cloud security, code security]
+    aliases: [Wiz Inc, Wiz Code, Wiz Defend, Wiz Research, Wiz Red Agent]
+  - name: Cloudflare
+    ticker: NET
+    exchange: NYSE
+    cik: 1477333
+    segments: [SASE, WAF, DDoS, zero trust, edge network]
+    aliases: [Cloudflare Inc, Cloudflare One, Cloudflare Zero Trust, Cloudforce One]
+  - name: Datadog
+    ticker: DDOG
+    exchange: NASDAQ
+    cik: 1561550
+    segments: [cloud SIEM, CNAPP, observability, application security]
+    aliases: [Datadog Inc, Datadog Cloud SIEM, Datadog Security Labs, Datadog Cloud Security, DDOG]
+  - name: Rapid7
+    ticker: RPD
+    exchange: NASDAQ
+    cik: 1560327
+    segments: [vulnerability management, SIEM, MDR, exposure management]
+    aliases: [Rapid7 Inc, InsightVM, InsightIDR, Metasploit, Rapid7 Command Platform]
+
+fixture:
+  - name: Nullgrid Security
+    segments: [XDR, EDR, MDR]
+    aliases: [Nullgrid, Nullgrid Sentinel XDR, Sentinel XDR]
+  - name: Obsidian Gate
+    segments: [SASE, zero trust, ZTNA]
+    aliases: [Obsidian Gate Inc, GateEdge]
+  - name: Lattice Defense
+    segments: [CNAPP, CSPM, cloud workload protection]
+    aliases: [Lattice Defense Inc, Lattice CloudGuard]
+  - name: Kestrel Identity
+    segments: [identity, IAM, ITDR]
+    aliases: [Kestrel Identity Inc, Kestrel ID, Kestrel Verify]
+  - name: Harbor Cloud Security
+    segments: [SIEM, data security, DSPM]
+    aliases: [Harbor Cloud, Harbor Cloud Security Inc, Harbor SIEM]

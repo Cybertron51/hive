@@ -15,6 +15,10 @@ envval() {
   grep -E "^$1=" .env | tail -1 | cut -d= -f2- | sed -e 's/^["'"'"']//' -e 's/["'"'"']$//'
 }
 
+chq() {
+  curl -s -m 5 "$CH/" -K - --data-binary "$1" <<<"user = \"default:$(envval CLICKHOUSE_PASSWORD)\"" 2>/dev/null
+}
+
 echo "Docker"
 if docker info >/dev/null 2>&1; then pass "docker daemon running"; else fail "docker daemon not running"; fi
 
@@ -23,9 +27,9 @@ health=$(docker inspect -f '{{.State.Health.Status}}' "$CONTAINER" 2>/dev/null |
 if [ "$health" = healthy ]; then pass "container $CONTAINER healthy"; else fail "container $CONTAINER status: $health"; fi
 if [ "$(curl -s -m 3 "$CH/ping" 2>/dev/null)" = "Ok." ]; then pass "HTTP :8123 responds"; else fail "HTTP :8123 not responding"; fi
 
-TABLES="agent_runs claims injection_events source_trust"
-VIEWS="latest_swarm runs_per_minute_by_model confidence_histogram quarantine_queue claims_by_status injection_recent injection_counts misclassification_by_model cost_by_model source_trust_current runs_timeline"
-have=$(curl -s -m 5 "$CH/" --data-binary "SELECT name FROM system.tables WHERE database = 'hive'" 2>/dev/null)
+TABLES="agent_runs claims injection_events source_trust heartbeats seen_docs"
+VIEWS="latest_swarm runs_per_minute_by_model confidence_histogram quarantine_queue claims_by_status injection_recent injection_counts misclassification_by_model cost_by_model source_trust_current runs_timeline heartbeats_recent verified_claims_feed claims_by_entity"
+have=$(chq "SELECT name FROM system.tables WHERE database = 'hive'")
 if [ -z "$have" ]; then
   fail "database hive missing or empty (run scripts/apply_schema.sh)"
 else
@@ -34,11 +38,20 @@ else
   if [ -z "$missing" ]; then pass "hive database: all tables and views present"; else fail "hive objects missing:$missing"; fi
   bad=""
   for v in $VIEWS; do
-    out=$(curl -s -m 5 "$CH/" --data-binary "SELECT count() FROM hive.$v" 2>&1)
+    out=$(chq "SELECT count() FROM hive.$v")
     case "$out" in *Exception*|*Code:*) bad="$bad $v" ;; esac
   done
   if [ -z "$bad" ]; then pass "all views query without error"; else fail "views erroring:$bad"; fi
 fi
+
+echo "ClickHouse security"
+if [ -n "$(envval CLICKHOUSE_PASSWORD)" ]; then pass "CLICKHOUSE_PASSWORD set in .env"; else fail "CLICKHOUSE_PASSWORD empty: writer user has no password"; fi
+ports=$(docker port "$CONTAINER" 2>/dev/null | awk '{print $3}')
+if [ -n "$ports" ] && ! echo "$ports" | grep -qv '^127\.0\.0\.1:'; then pass "ports bound to 127.0.0.1 only"; else fail "ports exposed beyond loopback: $(echo $ports)"; fi
+anon=$(curl -s -m 5 "$CH/" --data-binary "SELECT 1" 2>/dev/null)
+if [ "$anon" = "1" ]; then fail "unauthenticated queries are accepted"; else pass "unauthenticated queries rejected"; fi
+dw=$(curl -s -m 5 "$CH/?user=dashboard&password=hive-dashboard-ro" --data-binary "CREATE TABLE hive._probe (x UInt8) ENGINE = Memory" 2>/dev/null)
+case "$dw" in *READONLY*|*"readonly"*|*ACCESS_DENIED*) pass "dashboard user cannot write" ;; *) fail "dashboard user write not rejected: $(echo "$dw" | head -c 80)" ;; esac
 
 echo "Environment"
 if [ -f .env ]; then pass ".env present"; else fail ".env missing"; fi

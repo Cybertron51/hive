@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Hive Monitor</title>
+<title>Hive: competitive intelligence swarm</title>
 <style>
   :root {
     --bg: #0d0d0d; --surface: #1a1a19; --ink: #ffffff; --ink2: #c3c2b7; --muted: #898781;
@@ -16,8 +16,12 @@
   h1 { font-size: 16px; margin: 0; }
   #status { color: var(--muted); font-size: 12px; }
   .toggle { color: var(--ink2); font-size: 12px; cursor: pointer; }
-  #summary { background: var(--surface); border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; color: var(--ink2); }
-  #summary b { color: var(--ink); font-variant-numeric: tabular-nums; }
+  .bar { background: var(--surface); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; color: var(--ink2); }
+  .bar b { color: var(--ink); font-variant-numeric: tabular-nums; }
+  .legend-row { display: flex; flex-wrap: wrap; gap: 4px 18px; margin-bottom: 12px; font-size: 11px; color: var(--muted); }
+  .legend-row b { color: var(--ink2); font-weight: 600; margin-right: 4px; }
+  .legend-row i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px; }
+  .late { color: var(--warn); }
   #summary span.sep { color: var(--muted); margin: 0 8px; }
   section.wide { grid-column: 1 / -1; }
   #status.err { color: var(--crit); }
@@ -43,13 +47,22 @@
 </head>
 <body>
 <header>
-  <h1>Hive swarm monitor</h1>
+  <h1>Hive: competitive intelligence swarm</h1>
   <label class="toggle"><input type="checkbox" id="latestOnly" checked> latest swarm only</label>
   <span id="status">connecting…</span>
 </header>
-<div id="summary">loading…</div>
+<div id="hb" class="bar">Last heartbeat: loading…</div>
+<div id="summary" class="bar">loading…</div>
+<div id="legend" class="legend-row">
+  <span><i style="background:#0ca30c"></i><b>verified</b> judge agreed and confidence 0.75 or higher</span>
+  <span><i style="background:#ec835a"></i><b>quarantined</b> held back: judge disagreed, confidence under 0.6, or the source tried a prompt injection</span>
+  <span><i style="background:#3987e5"></i><b>rerouted</b> medium confidence, so the read was redone on the larger model</span>
+</div>
 <main>
   <section class="wide"><h2>Swarm timeline: runs per 10s by status (latest swarm)</h2><div id="timeline"></div></section>
+  <section class="wide"><h2>Verified claims feed</h2><div id="feed" class="tbl"></div></section>
+  <section><h2>Claims by entity</h2><div id="entities" class="tbl"></div></section>
+  <section><h2>Heartbeat history (last 20)</h2><div id="heartbeats" class="tbl"></div></section>
   <section><h2>Runs per minute by model</h2><div id="runs"></div></section>
   <section><h2>Confidence histogram by role</h2><div id="conf"></div></section>
   <section><h2>Quarantine queue</h2><div id="quarantine" class="tbl"></div></section>
@@ -60,7 +73,8 @@
 </main>
 <div id="tip"></div>
 <script>
-const CH = "http://localhost:8123/?add_http_cors_header=1&default_format=JSON";
+const CH = "http://localhost:8123/?default_format=JSON";
+const CH_AUTH = { "X-ClickHouse-User": "dashboard", "X-ClickHouse-Key": "hive-dashboard-ro" };
 const PALETTE = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9", "#e66767"];
 const colorOf = {};
 function color(key) {
@@ -83,7 +97,7 @@ function showTip(e, html) {
 function hideTip() { tip.style.display = "none"; }
 
 async function sql(text) {
-  const r = await fetch(CH, { method: "POST", body: text });
+  const r = await fetch(CH, { method: "POST", headers: CH_AUTH, body: text });
   if (!r.ok) throw new Error(`${r.status} ${(await r.text()).slice(0, 200)}`);
   return (await r.json()).data;
 }
@@ -121,7 +135,7 @@ function renderRuns(rows) {
   const minutes = [...new Set(rows.map(r => r.minute))].sort();
   const W = 520, H = 220, m = { l: 34, r: 10, t: 8, b: 22 };
   const svg = chartFrame(host, models, W, H, m);
-  const max = Math.max(...rows.map(r => +r.runs), 1);
+  const max = Math.max(...rows.map(r => +r.runs), 4);
   yAxis(svg, max, W, H, m, v => Math.round(v));
   const x = i => m.l + (minutes.length < 2 ? (W - m.l - m.r) / 2 : ((W - m.l - m.r) * i) / (minutes.length - 1));
   const y = v => H - m.b - ((H - m.t - m.b) * v) / max;
@@ -134,6 +148,7 @@ function renderRuns(rows) {
       return [x(i), y(r ? +r.runs : 0), r ? +r.runs : 0, mn];
     });
     el("polyline", { points: pts.map(p => p[0] + "," + p[1]).join(" "), fill: "none", stroke: color(mod), "stroke-width": 2, "stroke-linejoin": "round" }, svg);
+    if (pts.length < 12) pts.forEach(pt => el("circle", { cx: pt[0], cy: pt[1], r: 4, fill: color(mod), stroke: "#1a1a19", "stroke-width": 2 }, svg));
   });
   const hit = el("rect", { x: m.l, y: m.t, width: W - m.l - m.r, height: H - m.t - m.b, fill: "transparent" }, svg);
   hit.addEventListener("mousemove", e => {
@@ -157,7 +172,7 @@ function renderConf(rows) {
   const W = 520, H = 220, m = { l: 34, r: 10, t: 8, b: 22 };
   const svg = chartFrame(host, roles, W, H, m);
   const totals = buckets.map(b => rows.filter(r => +r.bucket === b).reduce((s, r) => s + +r.runs, 0));
-  const max = Math.max(...totals, 1);
+  const max = Math.max(...totals, 4);
   yAxis(svg, max, W, H, m, v => Math.round(v));
   const bw = (W - m.l - m.r) / buckets.length;
   buckets.forEach((b, i) => {
@@ -233,6 +248,61 @@ function renderTrust(rows) {
   ], rows, "no sources");
 }
 
+
+const short = v => esc(String(v).slice(0, 8));
+function renderFeed(rows) {
+  table($("feed"), [
+    { h: "time", f: r => t(r.created_at) },
+    { h: "entity", f: r => `<b>${esc(r.entity)}</b>` },
+    { h: "type", f: r => pill(r.claim_type) },
+    { h: "claim", f: r => `<span class="snip">${r.value ? `<b>${esc(r.value)}</b> ` : ""}<span style="color:var(--muted)">${esc(r.text)}</span></span>` },
+    { h: "source", k: "source_id" },
+    { h: "conf", num: true, f: r => (+r.confidence).toFixed(2) },
+  ], rows, "no verified claims yet");
+}
+function renderEntities(rows) {
+  table($("entities"), [
+    { h: "entity", k: "entity" },
+    { h: "verified", num: true, f: r => `<span style="color:var(--good)">${esc(r.verified)}</span>` },
+    { h: "quarantined", num: true, f: r => +r.quarantined ? `<span style="color:var(--bad)">${esc(r.quarantined)}</span>` : "0" },
+    { h: "total", num: true, k: "total" },
+    { h: "avg conf", num: true, f: r => (+r.avg_confidence).toFixed(2) },
+  ], rows, "no claims yet");
+}
+function renderHeartbeats(rows) {
+  lastHb = rows[0] || null;
+  renderHbLine();
+  table($("heartbeats"), [
+    { h: "time", f: r => t(r.ts) },
+    { h: "hb", f: r => short(r.heartbeat_id) },
+    { h: "new/docs", num: true, f: r => `${esc(r.docs_new)}/${esc(r.docs_collected)}` },
+    { h: "runs", num: true, k: "runs" },
+    { h: "verified", num: true, k: "claims_verified" },
+    { h: "quarantined", num: true, k: "claims_quarantined" },
+    { h: "inj", num: true, k: "injections" },
+    { h: "cost $", num: true, f: r => (+r.cost_usd).toFixed(4) },
+    { h: "secs", num: true, f: r => (+r.duration_ms / 1000).toFixed(1) },
+    { h: "status", f: r => pill(r.status, r.status === "ok" ? "" : "bad") },
+  ], rows, "no heartbeats yet");
+}
+let lastHb = null;
+function ago(sec) {
+  sec = Math.max(0, Math.round(sec));
+  return sec < 120 ? `${sec}s` : `${Math.round(sec / 60)}m`;
+}
+function renderHbLine() {
+  const host = $("hb");
+  if (!lastHb) { host.innerHTML = "Last heartbeat: <b>none yet</b>"; return; }
+  const at = new Date(String(lastHb.ts).replace(" ", "T") + "Z").getTime();
+  const age = (Date.now() - at) / 1000;
+  const left = +lastHb.interval_s - age;
+  const next = left >= 0 ? `next in <b>${ago(left)}</b>` : `<span class="late">overdue by <b>${ago(-left)}</b></span>`;
+  const st = lastHb.status === "ok" ? "" : ` <span class="pill bad">${esc(lastHb.status)}</span>`;
+  host.innerHTML = `Last heartbeat: <b>${ago(age)}</b> ago${st}, ${next}, <b>${esc(lastHb.docs_new)}</b> new docs, ` +
+    `<b>${esc(lastHb.claims_verified)}</b> verified, <b>${esc(lastHb.claims_quarantined)}</b> quarantined, <b>$${(+lastHb.cost_usd).toFixed(4)}</b>`;
+}
+setInterval(renderHbLine, 1000);
+
 const STATUSES = [["ok", "#0ca30c"], ["malformed", "#fab219"], ["quarantined", "#ec835a"], ["rerouted", "#3987e5"], ["error", "#d03b3b"]];
 
 function renderTimeline(rows) {
@@ -244,7 +314,7 @@ function renderTimeline(rows) {
   const svg = el("svg", { viewBox: `0 0 ${W} ${H}` });
   host.appendChild(svg);
   const totals = rows.map(r => STATUSES.reduce((a, [k]) => a + +r[k], 0));
-  const max = Math.max(...totals, 1);
+  const max = Math.max(...totals, 4);
   yAxis(svg, max, W, H, m, v => Math.round(v));
   const bw = (W - m.l - m.r) / rows.length;
   rows.forEach((r, i) => {
@@ -266,6 +336,12 @@ function renderTimeline(rows) {
 }
 
 const panels = [
+  { view: "verified_claims_feed", render: renderFeed,
+    all: "SELECT * FROM hive.verified_claims_feed ORDER BY created_at DESC LIMIT 50", tail: "ORDER BY created_at DESC LIMIT 50" },
+  { view: "claims_by_entity", render: renderEntities,
+    all: "SELECT entity, v AS verified, q AS quarantined, tt AS total, round(cs / tt, 3) AS avg_confidence FROM (SELECT entity, sum(verified) AS v, sum(quarantined) AS q, sum(total) AS tt, sum(avg_confidence * total) AS cs FROM hive.claims_by_entity GROUP BY entity) ORDER BY v DESC, tt DESC LIMIT 30",
+    tail: "ORDER BY verified DESC, total DESC LIMIT 30" },
+  { view: "heartbeats_recent", render: renderHeartbeats, all: "SELECT * FROM hive.heartbeats_recent ORDER BY ts DESC LIMIT 20", unscoped: true },
   { view: "runs_per_minute_by_model", render: renderRuns,
     all: "SELECT minute, model, sum(runs) AS runs, sum(failed) AS failed FROM hive.runs_per_minute_by_model GROUP BY minute, model ORDER BY minute, model",
     tail: "ORDER BY minute, model" },
@@ -326,6 +402,7 @@ async function tick() {
   document.body.dataset.h = document.documentElement.scrollHeight;
   s.textContent = failed ? `ClickHouse error on ${failed} query(ies)` : `live · UTC times · updated ${new Date().toLocaleTimeString()}`;
 }
+if (new URLSearchParams(location.search).get("latest") === "0") $("latestOnly").checked = false;
 $("latestOnly").addEventListener("change", tick);
 tick();
 setInterval(tick, 2000);

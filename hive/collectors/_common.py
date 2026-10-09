@@ -86,8 +86,10 @@ async def safe_get(
     params: dict | None = None,
     allowed_hosts: set[str] | None = None,
     max_bytes: int = MAX_BYTES,
+    truncate: bool = False,
 ) -> tuple[str, bytes, str]:
     """GET with scheme/IP validation on every redirect hop and a body size cap.
+    With truncate=True an oversized body is cut at max_bytes instead of raising.
     Returns (final_url, body, content_type)."""
     for _ in range(MAX_REDIRECTS + 1):
         await validate_url(url)
@@ -102,12 +104,15 @@ async def safe_get(
                 continue
             resp.raise_for_status()
             declared = resp.headers.get("content-length", "")
-            if declared.isdigit() and int(declared) > max_bytes:
+            if not truncate and declared.isdigit() and int(declared) > max_bytes:
                 raise ResponseTooLargeError(f"content-length {declared} exceeds {max_bytes}")
             buf = bytearray()
             async for chunk in resp.aiter_bytes():
                 buf.extend(chunk)
                 if len(buf) > max_bytes:
+                    if truncate:
+                        del buf[max_bytes:]
+                        break
                     raise ResponseTooLargeError(f"body exceeds {max_bytes} bytes")
             return str(resp.url), bytes(buf), resp.headers.get("content-type", "")
     raise UnsafeURLError(f"too many redirects (> {MAX_REDIRECTS})")

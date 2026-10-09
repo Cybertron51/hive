@@ -1,72 +1,167 @@
-"""SEC EDGAR full-text search. SEC requires a descriptive User-Agent with contact info:
-set SEC_USER_AGENT="YourOrg you@example.com"."""
+"""SEC EDGAR collectors.
+- source with `cik`: recent filings of `forms` from the submissions API (data.sec.gov), 8-K exhibits 99.x included.
+- source with `query`: EDGAR full-text search (efts.sec.gov).
+SEC requires a descriptive User-Agent with contact info: set SEC_USER_AGENT="YourOrg you@example.com"."""
 from __future__ import annotations
 
 import asyncio
 import json
 import os
 import re
+import time
 
 import httpx
+from lxml import etree
 
 from hive.collectors._common import USER_AGENT, ResponseTooLargeError, UnsafeURLError, decode, make_client, parse_dt, safe_get
 from hive.collectors.extract import html_to_text
 from hive.models import RawDocument
 
 SEARCH_URL = "https://efts.sec.gov/LATEST/search-index"
+SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik:010d}.json"
 ARCHIVE_URL = "https://www.sec.gov/Archives/edgar/data/{cik}/{adsh}/{filename}"
-ALLOWED_HOSTS = {"efts.sec.gov", "www.sec.gov"}
+ALLOWED_HOSTS = {"efts.sec.gov", "www.sec.gov", "data.sec.gov"}
 MAX_ITEMS_CAP = 20
+DOC_MAX_BYTES = 1024 * 1024
+MAX_TEXT_CHARS = 30_000
+SEC_MIN_INTERVAL = 0.125
 _ADSH = re.compile(r"^\d{10}-\d{2}-\d{6}$")
 _FILENAME = re.compile(r"^[A-Za-z0-9._-]+$")
+_EX99 = re.compile(r"ex-?99|dex99", re.IGNORECASE)
+
+_locks: dict[int, asyncio.Lock] = {}
+_last_request = 0.0
 
 
-def _doc_url(hit: dict) -> str:
-    src = hit.get("_source", {})
-    adsh, _, filename = str(hit.get("_id", "")).partition(":")
-    ciks = src.get("ciks") or []
-    if not (_ADSH.match(adsh) and _FILENAME.match(filename) and ciks and str(ciks[0]).isdigit()):
+async def _sec_get(client: httpx.AsyncClient, url: str, **kw) -> tuple[str, bytes, str]:
+    """SEC fair-access: at most ~8 requests/second across all EDGAR sources in this event loop."""
+    global _last_request
+    lock = _locks.setdefault(id(asyncio.get_running_loop()), asyncio.Lock())
+    async with lock:
+        wait = SEC_MIN_INTERVAL - (time.monotonic() - _last_request)
+        if wait > 0:
+            await asyncio.sleep(wait)
+        _last_request = time.monotonic()
+    return await safe_get(client, url, allowed_hosts=ALLOWED_HOSTS, **kw)
+
+
+def _client() -> httpx.AsyncClient:
+    return make_client(**{"User-Agent": os.environ.get("SEC_USER_AGENT", USER_AGENT)})
+
+
+def _archive_url(cik, adsh: str, filename: str) -> str:
+    if not (_ADSH.match(adsh) and _FILENAME.match(filename) and str(cik).isdigit()):
         return ""
-    return ARCHIVE_URL.format(cik=int(ciks[0]), adsh=adsh.replace("-", ""), filename=filename)
+    return ARCHIVE_URL.format(cik=int(cik), adsh=adsh.replace("-", ""), filename=filename)
 
 
-async def collect(source: dict) -> list[RawDocument]:
+async def _doc_text(client: httpx.AsyncClient, url: str) -> str:
+    try:
+        _, body, ctype = await _sec_get(client, url, max_bytes=DOC_MAX_BYTES, truncate=True)
+    except (httpx.HTTPError, UnsafeURLError, ResponseTooLargeError):
+        return ""
+    try:
+        return html_to_text(decode(body, ctype))[1]
+    except (ValueError, etree.LxmlError):
+        return ""
 
 
+async def _exhibit_99_texts(client: httpx.AsyncClient, cik, adsh: str, limit: int = 2) -> list[str]:
+    index_url = _archive_url(cik, adsh, "index.json")
+    if not index_url:
+        return []
+    try:
+        _, body, _ = await _sec_get(client, index_url)
+        items = json.loads(body).get("directory", {}).get("item", [])
+    except (httpx.HTTPError, UnsafeURLError, ResponseTooLargeError, ValueError):
+        return []
+    names = [i.get("name", "") for i in items if _EX99.search(i.get("name", "")) and i.get("name", "").lower().endswith((".htm", ".html"))]
+    texts = []
+    for name in sorted(names)[:limit]:
+        if (url := _archive_url(cik, adsh, name)) and (t := await _doc_text(client, url)):
+            texts.append(t)
+    return texts
+
+
+async def _collect_by_cik(source: dict, max_items: int) -> list[RawDocument]:
+    cik = int(source["cik"])
+    forms = source.get("forms") or ["8-K", "10-Q"]
+    forms = {forms} if isinstance(forms, str) else set(forms)
+    name = source.get("name") or (source.get("entities") or [""])[0]
+
+    async with _client() as client:
+        _, body, _ = await _sec_get(client, SUBMISSIONS_URL.format(cik=cik), max_bytes=8 * 1024 * 1024)
+        data = json.loads(body)
+        name = name or data.get("name", "")
+        recent = data.get("filings", {}).get("recent", {})
+        rows = zip(
+            recent.get("form", []), recent.get("accessionNumber", []), recent.get("filingDate", []),
+            recent.get("primaryDocument", []), recent.get("items", []) or [""] * len(recent.get("form", [])),
+        )
+        picked = [r for r in rows if r[0] in forms][:max_items]
+
+        docs = []
+        for form, adsh, filed, primary, items in picked:
+            url = _archive_url(cik, adsh, primary)
+            if not url:
+                continue
+            parts = [await _doc_text(client, url)]
+            if form == "8-K":
+                parts += await _exhibit_99_texts(client, cik, adsh)
+            text = "\n\n".join(p for p in parts if p)[:MAX_TEXT_CHARS]
+            title = f"{form} - {name} ({filed})" + (f" Items {items}" if items else "")
+            docs.append(
+                RawDocument(
+                    source_id=source["source_id"],
+                    url=url,
+                    title=title,
+                    text=text or f"{title}. Accession {adsh}.",
+                    published_at=parse_dt(filed),
+                    kind="edgar",
+                )
+            )
+    return docs
+
+
+def _search_hit_url(hit: dict) -> str:
+    adsh, _, filename = str(hit.get("_id", "")).partition(":")
+    ciks = hit.get("_source", {}).get("ciks") or []
+    return _archive_url(ciks[0], adsh, filename) if ciks else ""
+
+
+async def _collect_by_query(source: dict, max_items: int) -> list[RawDocument]:
     params = {"q": source["query"]}
     if source.get("forms"):
-        params["forms"] = source["forms"]
+        forms = source["forms"]
+        params["forms"] = forms if isinstance(forms, str) else ",".join(forms)
     if source.get("startdt") and source.get("enddt"):
         params.update(dateRange="custom", startdt=source["startdt"], enddt=source["enddt"])
-    max_items = min(int(source.get("max_items", 5)), MAX_ITEMS_CAP)
 
-    async with make_client(**{"User-Agent": os.environ.get("SEC_USER_AGENT", USER_AGENT)}) as client:
-        search_url, body, _ = await safe_get(client, SEARCH_URL, params=params, allowed_hosts=ALLOWED_HOSTS)
+    async with _client() as client:
+        search_url, body, _ = await _sec_get(client, SEARCH_URL, params=params)
         hits = json.loads(body).get("hits", {}).get("hits", [])[:max_items]
-
         docs = []
         for hit in hits:
             src = hit.get("_source", {})
-            url = _doc_url(hit)
+            url = _search_hit_url(hit)
             names = ", ".join(str(n) for n in src.get("display_names") or [])
-            title, text = f"{src.get('form', 'Filing')} - {names}".strip(" -"), ""
-            if url:
-                try:
-                    _, doc_body, ctype = await safe_get(client, url, allowed_hosts=ALLOWED_HOSTS)
-                    _, text = html_to_text(decode(doc_body, ctype))
-                except (httpx.HTTPError, UnsafeURLError, ResponseTooLargeError):
-                    pass
-                await asyncio.sleep(0.15)
-            if not text:
-                text = f"{title}. Filed {src.get('file_date', '')}. Period {src.get('period_ending', '')}."
+            title = f"{src.get('form', 'Filing')} - {names}".strip(" -")
+            text = (await _doc_text(client, url))[:MAX_TEXT_CHARS] if url else ""
             docs.append(
                 RawDocument(
                     source_id=source["source_id"],
                     url=url or search_url,
                     title=title,
-                    text=text,
+                    text=text or f"{title}. Filed {src.get('file_date', '')}.",
                     published_at=parse_dt(src.get("file_date")),
                     kind="edgar",
                 )
             )
     return docs
+
+
+async def collect(source: dict) -> list[RawDocument]:
+    max_items = min(int(source.get("max_items", 5)), MAX_ITEMS_CAP)
+    if source.get("cik"):
+        return await _collect_by_cik(source, max_items)
+    return await _collect_by_query(source, max_items)

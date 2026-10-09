@@ -6,3 +6,4 @@ node_modules/
 attack/sink/data/
 clickhouse/data/
 data/
+logs/

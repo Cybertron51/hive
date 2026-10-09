@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import atexit
+import hashlib
 import json
 import logging
 import threading
 import time
+from collections.abc import Iterable
+from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urlparse
 
@@ -36,7 +39,14 @@ COLUMNS: dict[str, list[str]] = {
         "detector", "pattern", "snippet", "severity",
     ],
     "source_trust": ["source_id", "trust", "updated_at"],
+    "heartbeats": [
+        "ts", "heartbeat_id", "swarm_id", "interval_s", "docs_collected",
+        "docs_new", "runs", "claims_verified", "claims_quarantined",
+        "injections", "cost_usd", "duration_ms", "status",
+    ],
+    "seen_docs": ["url_hash", "url", "source_id", "first_seen"],
 }
+
 
 _lock = threading.Lock()
 _buffers: dict[str, list[list[Any]]] = {t: [] for t in COLUMNS}
@@ -128,6 +138,80 @@ def upsert_trust(t: SourceTrust) -> None:
         _enqueue("source_trust", [t.source_id, t.trust, t.updated_at])
     except Exception as exc:
         log.warning("upsert_trust dropped: %s", exc)
+
+
+def _as_dt(v: Any) -> datetime:
+    if isinstance(v, datetime):
+        return v if v.tzinfo else v.replace(tzinfo=timezone.utc)
+    if isinstance(v, (int, float)):
+        return datetime.fromtimestamp(v, tz=timezone.utc)
+    if isinstance(v, str) and v:
+        dt = datetime.fromisoformat(v.replace("Z", "+00:00"))
+        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+    return datetime.now(timezone.utc)
+
+
+def url_hash(url: str) -> str:
+    return hashlib.sha256(url.strip().encode()).hexdigest()
+
+
+def _heartbeat_row(rec: dict[str, Any]) -> list[Any]:
+    row: list[Any] = []
+    for col in COLUMNS["heartbeats"]:
+        v = rec.get(col)
+        if col == "ts":
+            row.append(_as_dt(v))
+        elif col in ("heartbeat_id", "swarm_id"):
+            row.append(str(v or ""))
+        elif col == "status":
+            row.append(str(v or "ok"))
+        elif col == "cost_usd":
+            row.append(float(v or 0.0))
+        else:
+            row.append(max(0, int(v or 0)))
+    return row
+
+
+def log_heartbeat(record: Any) -> None:
+    try:
+        rec = record.model_dump() if hasattr(record, "model_dump") else dict(record)
+        _enqueue("heartbeats", _heartbeat_row(rec))
+        flush()
+    except Exception as exc:
+        log.warning("log_heartbeat dropped: %s", exc)
+
+
+def seen_urls(hashes: Iterable[str]) -> set[str]:
+    wanted = list(dict.fromkeys(hashes))
+    if not wanted:
+        return set()
+    client = _get_client()
+    if client is None:
+        log.warning("clickhouse down: treating all %d urls as unseen", len(wanted))
+        return set()
+    try:
+        res = client.query(
+            "SELECT url_hash FROM seen_docs WHERE url_hash IN {h:Array(String)}",
+            parameters={"h": wanted},
+        )
+        return {r[0] for r in res.result_rows}
+    except Exception as exc:
+        _mark_down(exc)
+        return set()
+
+
+def mark_seen(docs: Iterable[Any]) -> None:
+    try:
+        now_dt = datetime.now(timezone.utc)
+        for d in docs:
+            get = d.get if isinstance(d, dict) else lambda k, default="": getattr(d, k, default)
+            url = str(get("url", ""))
+            h = str(get("url_hash", "")) or (url_hash(url) if url else "")
+            if h:
+                _enqueue("seen_docs", [h, url, str(get("source_id", "")), now_dt])
+        flush()
+    except Exception as exc:
+        log.warning("mark_seen dropped: %s", exc)
 
 
 def flush() -> None:

@@ -72,3 +72,32 @@ CREATE TABLE IF NOT EXISTS hive.source_trust
 )
 ENGINE = ReplacingMergeTree(updated_at)
 ORDER BY source_id;
+
+CREATE TABLE IF NOT EXISTS hive.heartbeats
+(
+    ts                 DateTime64(3, 'UTC'),
+    heartbeat_id       String,
+    swarm_id           String,
+    interval_s         UInt32,
+    docs_collected     UInt32,
+    docs_new           UInt32,
+    runs               UInt32,
+    claims_verified    UInt32,
+    claims_quarantined UInt32,
+    injections         UInt32,
+    cost_usd           Float64,
+    duration_ms        UInt32,
+    status             LowCardinality(String)
+)
+ENGINE = MergeTree
+ORDER BY ts;
+
+CREATE TABLE IF NOT EXISTS hive.seen_docs
+(
+    url_hash   String,
+    url        String,
+    source_id  String,
+    first_seen DateTime64(3, 'UTC')
+)
+ENGINE = ReplacingMergeTree(first_seen)
+ORDER BY url_hash;

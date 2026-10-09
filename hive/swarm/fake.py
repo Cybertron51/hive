@@ -11,12 +11,16 @@ from hive.swarm.pricing import large_model
 TRIGGER = re.compile(r"ignore\s+(?:all\s+)?(?:previous|prior)\s+instructions", re.I)
 CONTRADICTION_CUES = ("did not", "denied", "denies", "failed", "false", "not true", "missed", "contrary")
 TYPE_CUES = [
-    ("trial_result", ("trial", "phase", "endpoint")),
+    ("acquisition", ("acquire", "acquisition", "merger")),
     ("funding", ("raised", "funding", "series", "financing")),
-    ("partnership", ("partner", "collaborat", "licens")),
-    ("regulatory", ("fda", "ema", "approval", "approved", "clearance")),
+    ("vulnerability_disclosure", ("cve-", "vulnerability", "zero-day", "patch")),
+    ("breach_incident", ("breach", "compromised", "intrusion", "ransomware")),
+    ("partnership", ("partner", "collaborat", "integration")),
+    ("certification", ("fedramp", "soc 2", "iso 27001", "certif")),
     ("personnel", ("ceo", "appoint", "hired", "resign", "chief")),
-    ("product", ("launch", "released", "product")),
+    ("pricing", ("pricing", "price", "per seat")),
+    ("earnings", ("revenue", "earnings", "quarter", "arr")),
+    ("product_launch", ("launch", "released", "unveil", "product")),
 ]
 _ENTITY = re.compile(r"\b([A-Z][A-Za-z0-9\-]+(?:\s+[A-Z][A-Za-z0-9\-]+)*)")
 _VALUE = re.compile(r"\$?\d[\d,.]*\s*(?:%|[MBK]\b|million|billion)?")
