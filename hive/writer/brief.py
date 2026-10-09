@@ -79,6 +79,14 @@ def sources_md(citations: list[Citation]) -> list[str]:
     return ["", "## Sources", ""] + [f"{c.n}. {c.source_url or c.node_id or 'verified claim'}" for c in citations]
 
 
+async def file_gap(run: AgentRun, question: str, entity: str, context: str, passages: list[Passage]) -> None:
+    """Unanswered by verified claims: record it in Senso's gap report as an open question."""
+    try:
+        run.output["gap"] = await get_kb().record_gap(question, entity, context, [p.content_id for p in passages if p.content_id] or None)
+    except SensoError as e:
+        run.output["gap_error"] = str(e)[:300]
+
+
 def _render(entity: str, question: str, sentences: list[dict], passages: list[Passage]) -> tuple[str, list[Citation], int]:
     kept, dropped = cited_sentences(sentences, len(passages))
     citations = citations_for(kept, passages)
@@ -105,6 +113,7 @@ async def write_brief(entity: str, question: str, model: str | None = None, swar
     if not passages:
         run.label = "no_context"
         markdown, _, _ = _render(entity, question, [], [])
+        await file_gap(run, question, entity, "no approved passages", [])
         return Brief(entity=entity, question=question, markdown=markdown, run=run)
 
     try:
@@ -125,6 +134,8 @@ async def write_brief(entity: str, question: str, model: str | None = None, swar
     total = len(sentences)
     run.confidence = (total - dropped) / total if total else 0.0
     run.output = {"passages": len(passages), "sentences": total, "dropped_uncited": dropped, "markdown": markdown}
+    if not citations:
+        await file_gap(run, question, entity, f"{len(passages)} approved passages, none answered", passages)
     return Brief(entity=entity, question=question, markdown=markdown, citations=citations, dropped_sentences=dropped, run=run)
 
 

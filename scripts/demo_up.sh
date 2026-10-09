@@ -4,16 +4,18 @@ cd "$(dirname "$0")/.."
 
 RESET=0
 FORCE=0
+HEARTBEAT=1
 for a in "$@"; do
   case "$a" in
     --reset) RESET=1 ;;
     --force) FORCE=1 ;;
-    *) echo "usage: scripts/demo_up.sh [--reset] [--force]"; exit 2 ;;
+    --no-heartbeat) HEARTBEAT=0 ;;
+    *) echo "usage: scripts/demo_up.sh [--reset] [--force] [--no-heartbeat]"; exit 2 ;;
   esac
 done
 
 mkdir -p logs
-PY=.venv/bin/python
+source scripts/_ch_mode.sh
 HB_PATTERN='python.* -m hive\.heartbeat'
 URL=http://localhost:8080/
 
@@ -25,9 +27,23 @@ echo "== dashboard server"
 if dash_up; then
   echo "already serving on :8080"
 else
-  (cd dashboard && nohup "../$PY" -m http.server 8080 --bind 127.0.0.1 >../logs/dashboard.log 2>&1 & echo $! >../logs/dashboard.pid)
+  ROOT=$(pwd)
+  ( cd dashboard; nohup "$ROOT/$PY" -m http.server 8080 --bind 127.0.0.1 >"$ROOT/logs/dashboard.log" 2>&1 & echo $! >"$ROOT/logs/dashboard.pid" )
   for _ in 1 2 3 4 5 6 7 8 9 10; do dash_up && break; sleep 0.5; done
   if dash_up; then echo "started (pid $(cat logs/dashboard.pid))"; else echo "FAILED to start dashboard server, see logs/dashboard.log"; exit 1; fi
+fi
+
+if [ "$IS_CLOUD" = 1 ]; then
+  echo "== dashboard proxy (ClickHouse Cloud)"
+  if pgrep -fi 'python.* scripts/dashboard_proxy\.py' >/dev/null; then
+    echo "already running"
+  else
+    nohup "$PY" scripts/dashboard_proxy.py >>logs/proxy.log 2>&1 &
+    echo $! >logs/proxy.pid
+    sleep 1
+    if kill -0 "$(cat logs/proxy.pid)" 2>/dev/null; then echo "started (pid $(cat logs/proxy.pid))"; else echo "FAILED, see logs/proxy.log"; exit 1; fi
+  fi
+  URL=http://localhost:8080/?proxy=1
 fi
 
 echo "== preflight"
@@ -53,7 +69,9 @@ fi
 
 echo "== heartbeat"
 existing=$(hb_pids)
-if [ -n "$existing" ]; then
+if [ "$HEARTBEAT" = 0 ]; then
+  echo "skipped (--no-heartbeat)"
+elif [ -n "$existing" ]; then
   echo "already running (pid $(echo $existing))"
 else
   nohup "$PY" -m hive.heartbeat --interval 90 --brief >>logs/heartbeat.log 2>&1 &

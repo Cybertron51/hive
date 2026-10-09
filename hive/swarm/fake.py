@@ -87,6 +87,30 @@ def _judge(user: str) -> dict:
             "injection_suspected": False, "injection_quote": ""}
 
 
+_CLAIM = re.compile(r"CLAIM:\n(\{.*?\})\n", re.S)
+
+
+def _squash(text: str) -> str:
+    return " ".join(text.lower().split())
+
+
+def _grounding(user: str, doc_text: str) -> dict:
+    m = _CLAIM.search(user)
+    try:
+        claim = json.loads(m.group(1)) if m else {}
+    except json.JSONDecodeError:
+        claim = {}
+    body = _squash(doc_text)
+    text, value = _squash(str(claim.get("text", ""))), _squash(str(claim.get("value", "")))
+    if text and text in body:
+        verdict, reason = "agree", "the document states the claim verbatim"
+    elif value and value in body:
+        verdict, reason = "na", "the document mentions the value but not the claim"
+    else:
+        verdict, reason = "disagree", "the document does not state the claim"
+    return {"verdict": verdict, "reason": reason, "confidence": 0.85, "injection_suspected": False, "injection_quote": ""}
+
+
 async def fake_chat_json(model: str, system: str, user: str, schema_hint: str, temperature: float = 0.0) -> LLMResult:
     doc = _DOC.search(user)
     text = doc.group(1) if doc else user
@@ -94,6 +118,8 @@ async def fake_chat_json(model: str, system: str, user: str, schema_hint: str, t
         data = _reader(text, model)
     elif "ROLE: classifier" in system:
         data = _classifier(text)
+    elif "ROLE: judge (grounding)" in system:
+        data = _grounding(user, text)
     elif "ROLE: judge" in system:
         data = _judge(user)
     else:

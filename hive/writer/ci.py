@@ -15,7 +15,7 @@ from hive.config import settings
 from hive.llm import chat_json
 from hive.models import AgentRun, Role, RunStatus
 from hive.senso.client import Passage, SensoError, get_kb
-from hive.writer.brief import Brief, brief_path, cited_sentences, citations_for, sources_md
+from hive.writer.brief import Brief, brief_path, cited_sentences, citations_for, file_gap, sources_md
 from hive.writer.vocab import CLAIM_TYPES, PROFILE_GUIDANCE, PROFILE_SECTIONS, label
 
 OUT_DIR = Path("docs/briefs")
@@ -112,10 +112,14 @@ async def competitor_profile(entity: str, model: str | None = None, swarm_id: st
         run = AgentRun(swarm_id=swarm_id, role=Role.WRITER, model=model or settings.akashml_model_writer,
                        label="profile", status=RunStatus.ERROR, error=str(e)[:500])
         return Brief(entity=entity, question="profile", markdown=f"# {entity}\n\nKnowledge base unavailable.\n", run=run)
-    return await _write(
+    brief = await _write(
         f"{entity}: competitor profile", entity, PROFILE_GUIDANCE, passages, model, swarm_id, "profile",
         ["_Every line is cited to a verified claim in Senso._"],
     )
+    if not brief.citations:
+        await file_gap(brief.run, f"What is {entity}'s competitive position, recent moves, risks and leadership?",
+                       entity, f"profile: {len(passages)} approved passages, none usable", passages)
+    return brief
 
 
 def _as_utc(ts: datetime | str) -> datetime:

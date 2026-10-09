@@ -30,6 +30,13 @@ LOCAL_KB_PATH = Path("data/kb.json")
 FOLDER = "shared-context"
 OWNER = "hive-judge"
 MAX_TAG = 64
+NO_MATCH_ID = "00000000-0000-0000-0000-000000000000"
+LOCAL_GAPS_PATH = Path("data/gaps.json")
+
+
+def gap_query(question: str, entity: str = "") -> str:
+    q = _one_line(question)
+    return (q if not entity or entity.lower() in q.lower() else f"{_one_line(entity)}: {q}")[:500]
 
 
 class SensoError(RuntimeError):
@@ -130,6 +137,8 @@ class KnowledgeBase(Protocol):
     async def wait_processed(self, node_id: str, timeout: float = 60) -> bool: ...
     async def search(self, query: str) -> dict[str, Any]: ...
     async def context(self, query: str, max_results: int = 20, approved_only: bool = True) -> list[Passage]: ...
+    async def record_gap(self, question: str, entity: str = "", context: str = "", content_ids: list[str] | None = None) -> dict[str, Any]: ...
+    async def gaps(self, statuses: tuple[str, ...] = ("weak", "open", "reopened"), search: str = "") -> list[dict[str, Any]]: ...
 
 
 class SensoKB:
@@ -258,6 +267,26 @@ class SensoKB:
         ]
         return approved(passages) if approved_only else passages
 
+    async def record_gap(
+        self, question: str, entity: str = "", context: str = "", content_ids: list[str] | None = None
+    ) -> dict[str, Any]:
+        """File an open question in Senso's gap report. Senso has no create-gap call: an answering search
+        that finds nothing files an api_unanswered_question gap (weak on first sighting, open on the second).
+        The search is scoped to the approved content the writer saw (or to nothing), so Senso records the gap
+        exactly when the verified KB could not answer."""
+        query = gap_query(question, entity)
+        body = {"query": query, "max_results": 3, "content_ids": list(content_ids or [NO_MATCH_ID]), "require_scoped_ids": True}
+        data = self._json(await self._request("POST", "/org/search", body), "record_gap")
+        return {"question": query, "entity": entity, "context": context[:500], "filed": not data.get("results"),
+                "total_results": data.get("total_results", 0)}
+
+    async def gaps(self, statuses: tuple[str, ...] = ("weak", "open", "reopened"), search: str = "") -> list[dict[str, Any]]:
+        params: dict[str, Any] = {"statuses": list(statuses), "origin_kinds": ["api_unanswered_question"], "limit": 100}
+        if search:
+            params["search"] = search
+        data = self._json(await self._request("GET", "/org/gaps", params=params), "gaps")
+        return data.get("gaps") or []
+
 
 class LocalKB:
     """Offline stand-in for Senso, backed by a JSON file. Ranking is plain token overlap."""
@@ -317,6 +346,27 @@ class LocalKB:
         if approved_only:
             passages = approved(passages)
         return passages[: min(max_results, self.max_results)]
+
+    async def record_gap(
+        self, question: str, entity: str = "", context: str = "", content_ids: list[str] | None = None
+    ) -> dict[str, Any]:
+        query = gap_query(question, entity)
+        async with self._lock:
+            gaps = json.loads(LOCAL_GAPS_PATH.read_text()) if LOCAL_GAPS_PATH.exists() else []
+            for g in gaps:
+                if g["claim_text"] == query:
+                    g["occurrence_count"] += 1
+                    g["status"] = "open"
+                    break
+            else:
+                gaps.append({"gap_id": new_id(), "claim_text": query, "status": "weak", "occurrence_count": 1, "context": context[:500]})
+            LOCAL_GAPS_PATH.parent.mkdir(parents=True, exist_ok=True)
+            LOCAL_GAPS_PATH.write_text(json.dumps(gaps, indent=2))
+        return {"question": query, "entity": entity, "context": context[:500], "filed": True, "total_results": 0}
+
+    async def gaps(self, statuses: tuple[str, ...] = ("weak", "open", "reopened"), search: str = "") -> list[dict[str, Any]]:
+        gaps = json.loads(LOCAL_GAPS_PATH.read_text()) if LOCAL_GAPS_PATH.exists() else []
+        return [g for g in gaps if g["status"] in statuses and search.lower() in g["claim_text"].lower()]
 
     async def search(self, query: str) -> dict[str, Any]:
         passages = await self.context(query)

@@ -143,22 +143,25 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-async def write_briefs(result: SwarmResult, since: datetime, log: bool) -> None:
+async def write_briefs(result: SwarmResult, since: datetime | None = None, log: bool = True) -> None:
     from hive.writer.ci import digest, save, write_profiles_for
+    from hive.writer.questions import ask_all, digest_lines
 
+    since = since or min((c.created_at for c in result.claims), default=datetime.now(timezone.utc))
     briefs = [(f"profile-{b.entity}", b) for b in await write_profiles_for(result)]
-    if not briefs:
-        print("briefs: no verified claims")
-        return
-    briefs.append((f"digest-{since:%Y%m%dT%H%M}", await digest(since, swarm_id=result.swarm_id)))
+    d = await digest(since, swarm_id=result.swarm_id)
+    answers, q_runs = await ask_all(swarm_id=result.swarm_id)
+    d.markdown += digest_lines(answers)
+    briefs.append((f"digest-{since:%Y%m%dT%H%M}", d))
     for name, b in briefs:
         path = save(b, name)
         print(f"brief {name}: {path} status={b.run.status.value} citations={len(b.citations)} dropped={b.dropped_sentences}")
+    print(f"questions: {sum(a.answered for a in answers)} answered, {sum(not a.answered for a in answers)} open (filed to Senso gaps)")
     if log:
         try:
             from hive import telemetry
-            for _, b in briefs:
-                telemetry.log_run(b.run)
+            for run in [b.run for _, b in briefs] + q_runs:
+                telemetry.log_run(run)
             telemetry.flush()
         except Exception as exc:
             print(f"brief telemetry failed: {type(exc).__name__}: {exc}", file=sys.stderr)

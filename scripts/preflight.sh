@@ -92,6 +92,10 @@ echo "Senso"
 if [ -n "$(envval SENSO_API_KEY)" ]; then pass "SENSO_API_KEY set"; else note "SENSO_API_KEY unset: local KB fallback will be used"; fi
 
 echo "Dashboard"
+if [ "$IS_CLOUD" = 1 ]; then
+  px=$(curl -s -m 5 -X POST localhost:8765/query --data-binary "SELECT 1 AS ok" 2>/dev/null)
+  case "$px" in *'"ok"'*) pass "dashboard proxy answers on :8765" ;; *) fail "dashboard proxy not answering (scripts/demo_up.sh starts it)" ;; esac
+fi
 if [ "$(curl -s -m 3 -o /dev/null -w '%{http_code}' http://localhost:8080/ 2>/dev/null)" = 200 ]; then
   pass "dashboard reachable on :8080"
 else

@@ -45,11 +45,18 @@ SELECT
     c.confidence AS confidence,
     c.status AS status,
     c.judge_verdict AS judge_verdict,
-    c.judge_reason AS judge_reason
+    c.judge_reason AS judge_reason,
+    multiIf(
+        c.judge_reason != '', c.judge_reason,
+        c.judge_verdict = 'disagree', 'judge disagreed',
+        c.confidence < 0.6, 'confidence under 0.6',
+        c.status = 'quarantined', 'source flagged for prompt injection',
+        ''
+    ) AS reason
 FROM hive.claims AS c FINAL
 LEFT JOIN (SELECT run_id, any(swarm_id) AS swarm_id FROM hive.agent_runs GROUP BY run_id) AS r ON c.run_id = r.run_id
-WHERE c.status IN ('pending', 'quarantined')
-  AND (c.confidence < 0.6 OR c.judge_verdict = 'disagree')
+WHERE c.status = 'quarantined'
+   OR (c.status = 'pending' AND (c.confidence < 0.6 OR c.judge_verdict = 'disagree'))
 ORDER BY c.created_at DESC
 LIMIT 500;
 

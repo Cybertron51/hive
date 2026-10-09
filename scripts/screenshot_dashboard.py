@@ -8,6 +8,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from hive.config import settings
+
 CHROME_CANDIDATES = [
     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
     "/Applications/Chromium.app/Contents/MacOS/Chromium",
@@ -48,7 +50,8 @@ def main() -> None:
     ap.add_argument("output", nargs="?", default="docs/screenshots/dashboard.png")
     ap.add_argument("--url", default="http://localhost:8080/")
     ap.add_argument("--width", type=int, default=1400)
-    ap.add_argument("--proxy", action="store_true", help="read through the dashboard proxy (ClickHouse Cloud mode)")
+    cloud = settings.clickhouse_secure or settings.clickhouse_url.startswith("https://")
+    ap.add_argument("--proxy", action="store_true", default=cloud, help="read through the dashboard proxy (on by default when .env points at ClickHouse Cloud)")
     ap.add_argument("--all-swarms", action="store_true", help="turn the latest-swarm-only filter off")
     args = ap.parse_args()
     for flag, param in ((args.proxy, "proxy=1"), (args.all_swarms, "latest=0")):

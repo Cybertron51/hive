@@ -54,7 +54,7 @@ def test_detect_and_canary_helpers():
     assert not canary_check({"injection_suspected": False, "injection_quote": ""})
 
 
-@pytest.mark.parametrize("text,expected", [("Acme Bio reportedly raised $10M.", ClaimStatus.PENDING)])
+@pytest.mark.parametrize("text,expected", [("Acme Bio reportedly raised $10M.", ClaimStatus.VERIFIED)])
 def test_reroute_runs_large_reader(monkeypatch, text, expected):
     import asyncio
 
@@ -100,3 +100,44 @@ def test_fixture_corpus_quarantines_injected_blog(monkeypatch):
     blog = [c for c in res.claims if c.doc_id in injected]
     assert blog and all(c.status == ClaimStatus.QUARANTINED for c in blog)
     assert all(res.trust[e.source_id] < 1.0 for e in res.injection_events if e.doc_id in injected)
+
+
+def _single_source(monkeypatch, rewrite=None):
+    import asyncio
+
+    from hive.llm import LLMResult
+
+    async def chat(model, system, user, schema_hint, temperature=0.0):
+        result = await fake.fake_chat_json(model, system, user, schema_hint, temperature)
+        if rewrite and "ROLE: reader" in system:
+            for c in result.data["claims"]:
+                c["text"], c["value"] = rewrite
+        return LLMResult(**{**result.model_dump(), "data": result.data})
+
+    monkeypatch.setattr("hive.llm.chat_json", chat)
+    doc = fake.SAMPLE_DOCS[0].model_copy(update={"doc_id": "solo"})
+    return asyncio.run(run_swarm([doc], telemetry=False, ingest=False))
+
+
+def test_single_source_claim_verified_by_grounding(monkeypatch):
+    res = _single_source(monkeypatch)
+    [claim] = res.claims
+    assert claim.status == ClaimStatus.VERIFIED
+    assert claim.judge_verdict == JudgeVerdict.AGREE
+    assert claim.judge_reason.startswith("single-source grounded:")
+    assert sum(1 for r in res.runs if r.role == "judge") == 1
+    assert res.trust["biopharmadive"] == 1.0
+
+
+def test_ungrounded_single_source_claim_quarantined(monkeypatch):
+    res = _single_source(monkeypatch, rewrite=("Acme Bio was acquired by Globex for $2 billion.", "$2 billion"))
+    [claim] = res.claims
+    assert claim.status == ClaimStatus.QUARANTINED
+    assert claim.judge_verdict == JudgeVerdict.DISAGREE
+    assert claim.judge_reason.startswith("ungrounded:")
+    assert res.trust["biopharmadive"] == 1.0
+
+
+def test_corroborated_reason_prefix(result):
+    [claim] = _claims_for(result, "biopharmadive")
+    assert claim.judge_reason.startswith("corroborated:")

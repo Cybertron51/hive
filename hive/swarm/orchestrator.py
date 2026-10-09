@@ -124,22 +124,29 @@ def _evidence_for(state: _DocState, entity: str, states: list[_DocState]) -> lis
 
 
 async def _judge_claim(
-    state: _DocState, c: dict, states: list[_DocState], swarm_id: str, sem: asyncio.Semaphore, result: SwarmResult
+    state: _DocState, c: dict, states: list[_DocState], swarm_id: str, sem: asyncio.Semaphore, result: SwarmResult,
+    source_trust: dict[str, float],
 ) -> Claim:
     confidence = _blend(c["confidence"], state.classifier_conf)
     verdict, reason = JudgeVerdict.NA, ""
+    status = policy.decide(confidence, state.injected, verdict)
     if not state.injected and confidence >= policy.MIN_CONFIDENCE:
+        payload = {k: c[k] for k in ("entity", "claim_type", "text", "value")}
         evidence = _evidence_for(state, c["entity"], states)
+        fallback = "no corroborating documents"
         if evidence:
-            payload = {k: c[k] for k in ("entity", "claim_type", "text", "value")}
             async with sem:
                 run, out = await agents.run_judge(payload, evidence, swarm_id, large_model(), state.doc)
             result.runs.append(run)
             if run.status == RunStatus.OK:
-                verdict, reason = JudgeVerdict(out["verdict"]), out["reason"]
+                verdict, reason = JudgeVerdict(out["verdict"]), policy.REASON_CORROBORATED + out["reason"]
+                fallback = "evidence silent"
+            else:
+                fallback = f"judge {run.status.value}"
+        if verdict != JudgeVerdict.NA:
+            status = policy.decide(confidence, state.injected, verdict)
         else:
-            reason = "no corroborating documents"
-    status = policy.decide(confidence, state.injected, verdict)
+            verdict, reason, status = await _ground_claim(state, payload, confidence, fallback, swarm_id, sem, result, source_trust)
     return Claim(
         run_id=c.get("reader_run_id") or (state.reader_run.run_id if state.reader_run else new_id()),
         doc_id=state.doc.doc_id, source_id=state.doc.source_id, entity=c["entity"], claim_type=c["claim_type"],
@@ -148,12 +155,44 @@ async def _judge_claim(
     )
 
 
+async def _ground_claim(
+    state: _DocState, payload: dict, confidence: float, fallback: str, swarm_id: str, sem: asyncio.Semaphore,
+    result: SwarmResult, source_trust: dict[str, float],
+) -> tuple[JudgeVerdict, str, ClaimStatus]:
+    async with sem:
+        run, out = await agents.run_grounding(payload, state.doc, swarm_id, large_model())
+    result.runs.append(run)
+    if run.status != RunStatus.OK:
+        status = policy.decide(confidence, state.injected, JudgeVerdict.NA)
+        return JudgeVerdict.NA, f"{fallback}; grounding {run.status.value}: {run.error}"[:300], status
+    verdict = JudgeVerdict(out["verdict"])
+    status = policy.decide_grounded(confidence, state.injected, verdict, source_trust.get(state.doc.source_id, 1.0))
+    if status == ClaimStatus.VERIFIED:
+        prefix = policy.REASON_GROUNDED
+    elif verdict == JudgeVerdict.DISAGREE:
+        prefix = policy.REASON_UNGROUNDED
+    else:
+        prefix = f"{fallback}; grounding {verdict.value}: "
+    return verdict, prefix + out["reason"], status
+
+
+def _injection_trust(states: list[_DocState], result: SwarmResult) -> dict[str, float]:
+    return {
+        src: policy.trust_score([e for e in result.injection_events if e.source_id == src], 0)
+        for src in {s.doc.source_id for s in states}
+    }
+
+
 def _trust(states: list[_DocState], result: SwarmResult) -> dict[str, float]:
     sources = {s.doc.source_id for s in states}
     return {
         src: policy.trust_score(
-            sum(1 for e in result.injection_events if e.source_id == src),
-            sum(1 for c in result.claims if c.source_id == src and c.judge_verdict == JudgeVerdict.DISAGREE),
+            [e for e in result.injection_events if e.source_id == src],
+            sum(
+                1 for c in result.claims
+                if c.source_id == src and c.judge_verdict == JudgeVerdict.DISAGREE
+                and c.judge_reason.startswith(policy.REASON_CORROBORATED)
+            ),
         )
         for src in sorted(sources)
     }
@@ -237,7 +276,10 @@ async def run_swarm(
     states = list(await asyncio.gather(*(_process_doc(d, result.swarm_id, sem, result) for d in docs)))
     await asyncio.gather(*(_reroute(s, result.swarm_id, sem, result) for s in states))
     pairs = [(s, c) for s in states for c in s.claims]
-    result.claims = list(await asyncio.gather(*(_judge_claim(s, c, states, result.swarm_id, sem, result) for s, c in pairs)))
+    pre_trust = _injection_trust(states, result)
+    result.claims = list(await asyncio.gather(
+        *(_judge_claim(s, c, states, result.swarm_id, sem, result, pre_trust) for s, c in pairs)
+    ))
     tracked = {claim.claim_id: bool(c.get("tracked", True)) for (_, c), claim in zip(pairs, result.claims)}
     result.trust = _trust(states, result)
     by_id = {d.doc_id: d for d in docs}

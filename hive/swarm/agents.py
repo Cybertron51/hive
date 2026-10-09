@@ -16,7 +16,9 @@ def _num(value: Any, default: float = 0.0) -> float:
         return default
 
 
-async def _call(role: Role, model: str, user: str, swarm_id: str, doc: RawDocument | None) -> tuple[AgentRun, dict]:
+async def _call(
+    role: Role, model: str, user: str, swarm_id: str, doc: RawDocument | None, prompt_key: str | None = None
+) -> tuple[AgentRun, dict]:
     run = AgentRun(
         swarm_id=swarm_id,
         role=role,
@@ -24,7 +26,8 @@ async def _call(role: Role, model: str, user: str, swarm_id: str, doc: RawDocume
         doc_id=doc.doc_id if doc else "",
         source_id=doc.source_id if doc else "",
     )
-    system, schema = prompts.SYSTEM[role.value], prompts.SCHEMA[role.value]
+    key = prompt_key or role.value
+    system, schema = prompts.SYSTEM[key], prompts.SCHEMA[key]
     data: dict | None = None
     for _attempt in range(2):
         try:
@@ -120,6 +123,16 @@ async def run_judge(
 ) -> tuple[AgentRun, dict]:
     evidence = [(d.title, d.url, d.text) for d in evidence_docs[:3]]
     run, data = await _call(Role.JUDGE, model or large_model(), prompts.judge_user(claim, evidence), swarm_id, doc)
+    return _parse_verdict(run, data)
+
+
+async def run_grounding(claim: dict, doc: RawDocument, swarm_id: str, model: str | None = None) -> tuple[AgentRun, dict]:
+    user = prompts.grounding_user(claim, doc.title, doc.url, doc.text)
+    run, data = await _call(Role.JUDGE, model or large_model(), user, swarm_id, doc, prompt_key="judge_grounding")
+    return _parse_verdict(run, data)
+
+
+def _parse_verdict(run: AgentRun, data: dict) -> tuple[AgentRun, dict]:
     if run.status in (RunStatus.ERROR, RunStatus.MALFORMED):
         return run, {"verdict": JudgeVerdict.NA.value, "reason": run.error, "confidence": 0.0}
     verdict = str(data.get("verdict") or "na").lower()
